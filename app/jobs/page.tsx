@@ -1,7 +1,8 @@
 import { applyAction, postJobAction } from "@/lib/actions";
 import { listOpenJobs } from "@/lib/data";
 import { NotConfiguredError } from "@/lib/google";
-import { safeAuth } from "@/lib/auth";
+import { demoActive, demoAllJobs, readDemoState } from "@/lib/demo";
+import { getCurrentUser } from "@/lib/user";
 import { Flash, SetupNotice } from "@/components/notices";
 import type { Row } from "@/lib/db";
 
@@ -16,15 +17,19 @@ export default async function JobsPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const sp = await searchParams;
-  const session = await safeAuth();
+  const user = await getCurrentUser();
 
   let jobs: Row[] | null = null;
   let notConfigured = false;
-  try {
-    jobs = await listOpenJobs();
-  } catch (err) {
-    if (err instanceof NotConfiguredError) notConfigured = true;
-    else throw err;
+  if (demoActive) {
+    jobs = demoAllJobs(await readDemoState());
+  } else {
+    try {
+      jobs = await listOpenJobs();
+    } catch (err) {
+      if (err instanceof NotConfiguredError) notConfigured = true;
+      else throw err;
+    }
   }
 
   return (
@@ -87,7 +92,7 @@ export default async function JobsPage({
                 {job.description}
               </p>
             )}
-            {session?.user?.email ? (
+            {user ? (
               <form action={applyAction} className="mt-4">
                 <input type="hidden" name="job_id" value={job.id} />
                 <button

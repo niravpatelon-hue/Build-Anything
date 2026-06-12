@@ -2,11 +2,22 @@
 
 import { Readable } from "node:stream";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { getGoogleClients, NotConfiguredError } from "./google";
 import { getInfra } from "./db";
 import { applyManually, postJob, saveProfile } from "./data";
 import { AINotConfiguredError, parseResume } from "./ai";
-import { authConfigured, safeAuth, signIn, signOut } from "./auth";
+import { authConfigured, signIn, signOut } from "./auth";
+import {
+  DEMO_PARSED,
+  demoActive,
+  demoApply,
+  demoPostJob,
+  demoSaveProfile,
+  readDemoState,
+  writeDemoState,
+} from "./demo";
+import { DEMO_SESSION_COOKIE, getCurrentUser, type CurrentUser } from "./user";
 
 const MAX_RESUME_BYTES = 4 * 1024 * 1024; // Vercel request body limit is 4.5 MB
 
@@ -33,6 +44,16 @@ function isNextRedirect(err: unknown): boolean {
 }
 
 export async function signInAction(): Promise<void> {
+  if (demoActive) {
+    const jar = await cookies();
+    jar.set(DEMO_SESSION_COOKIE, "1", {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7,
+      httpOnly: true,
+      sameSite: "lax",
+    });
+    redirect("/profile?demo=1");
+  }
   if (!authConfigured) {
     redirect(
       `/profile?error=${encodeURIComponent(
@@ -44,18 +65,25 @@ export async function signInAction(): Promise<void> {
 }
 
 export async function signOutAction(): Promise<void> {
+  const jar = await cookies();
+  if (jar.get(DEMO_SESSION_COOKIE)) {
+    jar.delete(DEMO_SESSION_COOKIE);
+    jar.delete("demo-state");
+    redirect("/");
+  }
   await signOut({ redirectTo: "/" });
 }
 
-async function requireEmail(): Promise<string> {
-  const session = await safeAuth();
-  const email = session?.user?.email;
-  if (!email) {
+async function requireUser(): Promise<CurrentUser> {
+  const user = await getCurrentUser();
+  if (!user) {
     redirect(
-      `/profile?error=${encodeURIComponent("Sign in with Google first.")}`
+      `/profile?error=${encodeURIComponent(
+        demoActive ? "Hit “Sign in” first to start the demo." : "Sign in with Google first."
+      )}`
     );
   }
-  return email!;
+  return user!;
 }
 
 async function uploadResumeToDrive(file: File, email: string): Promise<string> {
@@ -78,7 +106,7 @@ async function uploadResumeToDrive(file: File, email: string): Promise<string> {
 
 /** Resume upload → Drive storage → Claude reads it → profile auto-filled. */
 export async function uploadResumeAction(formData: FormData): Promise<void> {
-  const email = await requireEmail();
+  const user = await requireUser();
   let target: string;
   try {
     const resume = formData.get("resume");
@@ -89,26 +117,44 @@ export async function uploadResumeAction(formData: FormData): Promise<void> {
       throw new Error("Resume is too big — keep it under 4 MB.");
     }
 
-    const buffer = Buffer.from(await resume.arrayBuffer());
-    const [parsed, resumeLink] = await Promise.all([
-      parseResume(buffer, resume.type, resume.name),
-      uploadResumeToDrive(resume, email),
-    ]);
+    if (user.demo) {
+      const state = await readDemoState();
+      const autoApplied = demoSaveProfile(state, {
+        name: DEMO_PARSED.name,
+        phone: DEMO_PARSED.phone,
+        location: DEMO_PARSED.location,
+        headline: DEMO_PARSED.headline,
+        summary: DEMO_PARSED.summary,
+        skills: DEMO_PARSED.skills.join(", "),
+        preferred_titles: DEMO_PARSED.suggested_titles.join(", "),
+        preferred_locations: "london, remote",
+        experience: JSON.stringify(DEMO_PARSED.experience),
+        education: JSON.stringify(DEMO_PARSED.education),
+      });
+      await writeDemoState(state);
+      target = `/profile?parsed=demo&auto=${autoApplied}`;
+    } else {
+      const buffer = Buffer.from(await resume.arrayBuffer());
+      const [parsed, resumeLink] = await Promise.all([
+        parseResume(buffer, resume.type, resume.name),
+        uploadResumeToDrive(resume, user.email),
+      ]);
 
-    const { autoApplied } = await saveProfile({
-      email,
-      name: parsed.name || undefined,
-      phone: parsed.phone,
-      location: parsed.location,
-      headline: parsed.headline,
-      summary: parsed.summary,
-      skills: parsed.skills.join(", "),
-      preferred_titles: parsed.suggested_titles.join(", "),
-      experience: JSON.stringify(parsed.experience),
-      education: JSON.stringify(parsed.education),
-      resume_link: resumeLink,
-    });
-    target = `/profile?parsed=1&auto=${autoApplied}`;
+      const { autoApplied } = await saveProfile({
+        email: user.email,
+        name: parsed.name || undefined,
+        phone: parsed.phone,
+        location: parsed.location,
+        headline: parsed.headline,
+        summary: parsed.summary,
+        skills: parsed.skills.join(", "),
+        preferred_titles: parsed.suggested_titles.join(", "),
+        experience: JSON.stringify(parsed.experience),
+        education: JSON.stringify(parsed.education),
+        resume_link: resumeLink,
+      });
+      target = `/profile?parsed=1&auto=${autoApplied}`;
+    }
   } catch (err) {
     if (isNextRedirect(err)) throw err;
     target = `/profile?error=${encodeURIComponent(friendlyError(err))}`;
@@ -117,67 +163,99 @@ export async function uploadResumeAction(formData: FormData): Promise<void> {
 }
 
 export async function saveProfileAction(formData: FormData): Promise<void> {
-  const email = await requireEmail();
+  const user = await requireUser();
+  const fields = {
+    name: String(formData.get("name") ?? "").trim(),
+    phone: String(formData.get("phone") ?? "").trim(),
+    location: String(formData.get("location") ?? "").trim(),
+    headline: String(formData.get("headline") ?? "").trim(),
+    summary: String(formData.get("summary") ?? "").trim(),
+    skills: String(formData.get("skills") ?? "").trim(),
+    preferred_titles: String(formData.get("preferred_titles") ?? "").trim(),
+    preferred_locations: String(
+      formData.get("preferred_locations") ?? ""
+    ).trim(),
+  };
+  const autoApply = formData.get("auto_apply") === "on";
+
   let target: string;
   try {
-    const { autoApplied } = await saveProfile({
-      email,
-      name: String(formData.get("name") ?? "").trim(),
-      phone: String(formData.get("phone") ?? "").trim(),
-      location: String(formData.get("location") ?? "").trim(),
-      headline: String(formData.get("headline") ?? "").trim(),
-      summary: String(formData.get("summary") ?? "").trim(),
-      skills: String(formData.get("skills") ?? "").trim(),
-      preferred_titles: String(formData.get("preferred_titles") ?? "").trim(),
-      preferred_locations: String(
-        formData.get("preferred_locations") ?? ""
-      ).trim(),
-      auto_apply: formData.get("auto_apply") === "on",
-    });
-    target = `/profile?saved=1&auto=${autoApplied}`;
+    if (user.demo) {
+      const state = await readDemoState();
+      const autoApplied = demoSaveProfile(state, {
+        ...fields,
+        auto_apply: autoApply ? "yes" : "no",
+      });
+      await writeDemoState(state);
+      target = `/profile?saved=1&auto=${autoApplied}`;
+    } else {
+      const { autoApplied } = await saveProfile({
+        email: user.email,
+        ...fields,
+        auto_apply: autoApply,
+      });
+      target = `/profile?saved=1&auto=${autoApplied}`;
+    }
   } catch (err) {
+    if (isNextRedirect(err)) throw err;
     target = `/profile?error=${encodeURIComponent(friendlyError(err))}`;
   }
   redirect(target);
 }
 
 export async function postJobAction(formData: FormData): Promise<void> {
+  const job = {
+    title: String(formData.get("title") ?? "").trim(),
+    company: String(formData.get("company") ?? "").trim(),
+    location: String(formData.get("location") ?? "").trim(),
+    salary: String(formData.get("salary") ?? "").trim(),
+    description: String(formData.get("description") ?? "").trim(),
+  };
   let target: string;
   try {
-    const { autoApplied } = await postJob({
-      title: String(formData.get("title") ?? "").trim(),
-      company: String(formData.get("company") ?? "").trim(),
-      location: String(formData.get("location") ?? "").trim(),
-      salary: String(formData.get("salary") ?? "").trim(),
-      description: String(formData.get("description") ?? "").trim(),
-    });
-    target = `/jobs?posted=1&auto=${autoApplied}`;
+    if (demoActive) {
+      const state = await readDemoState();
+      const autoApplied = demoPostJob(state, job);
+      await writeDemoState(state);
+      target = `/jobs?posted=1&auto=${autoApplied}`;
+    } else {
+      const { autoApplied } = await postJob(job);
+      target = `/jobs?posted=1&auto=${autoApplied}`;
+    }
   } catch (err) {
+    if (isNextRedirect(err)) throw err;
     target = `/jobs?error=${encodeURIComponent(friendlyError(err))}`;
   }
   redirect(target);
 }
 
 export async function applyAction(formData: FormData): Promise<void> {
-  const session = await safeAuth();
-  const email = session?.user?.email;
-  if (!email) {
+  const user = await getCurrentUser();
+  if (!user) {
     redirect(
       `/jobs?error=${encodeURIComponent(
-        "Sign in with Google first — your profile is what gets submitted."
+        "Sign in first — your profile is what gets submitted."
       )}`
     );
   }
+  const jobId = String(formData.get("job_id") ?? "");
   let target: string;
   try {
-    const result = await applyManually(
-      String(formData.get("job_id") ?? ""),
-      email!
-    );
-    target = `/jobs?${result.ok ? "applied" : "error"}=${encodeURIComponent(
-      result.message
-    )}`;
+    if (user!.demo) {
+      const state = await readDemoState();
+      const result = demoApply(state, jobId);
+      await writeDemoState(state);
+      target = `/jobs?${result.ok ? "applied" : "error"}=${encodeURIComponent(
+        result.message
+      )}`;
+    } else {
+      const result = await applyManually(jobId, user!.email);
+      target = `/jobs?${result.ok ? "applied" : "error"}=${encodeURIComponent(
+        result.message
+      )}`;
+    }
   } catch (err) {
+    if (isNextRedirect(err)) throw err;
     target = `/jobs?error=${encodeURIComponent(friendlyError(err))}`;
   }
   redirect(target);

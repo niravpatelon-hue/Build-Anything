@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { safeAuth } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/user";
+import { demoActive } from "@/lib/demo";
 import { signInAction, signOutAction } from "@/lib/actions";
 import "./globals.css";
 
@@ -14,12 +15,19 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const session = await safeAuth();
-  const firstName = session?.user?.name?.split(" ")[0];
+  const user = await getCurrentUser();
+  const firstName = user?.name.split(" ")[0];
 
   return (
     <html lang="en">
       <body>
+        {demoActive && (
+          <div className="bg-amber-400/90 px-4 py-1.5 text-center text-xs font-medium text-amber-950">
+            🧪 Demo preview — sample data, nothing is saved permanently. The
+            full setup later switches on real sign-in, real AI and your Google
+            Sheet database.
+          </div>
+        )}
         <header className="border-b border-slate-200 bg-white">
           <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
             <a href="/" className="text-lg font-bold tracking-tight">
@@ -35,7 +43,7 @@ export default async function RootLayout({
               <a href="/applications" className="hover:text-indigo-600">
                 My Applications
               </a>
-              {session ? (
+              {user ? (
                 <form action={signOutAction} className="flex items-center gap-2">
                   <span className="hidden text-slate-500 sm:inline">
                     Hi, {firstName ?? "there"}
@@ -53,7 +61,7 @@ export default async function RootLayout({
                     type="submit"
                     className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700"
                   >
-                    Sign in
+                    {demoActive ? "Try the demo" : "Sign in"}
                   </button>
                 </form>
               )}

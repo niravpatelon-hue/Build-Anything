@@ -41,12 +41,22 @@ export function Flash({
   }
   if (searchParams.parsed) {
     const auto = Number(searchParams.auto ?? 0);
+    const isDemo = searchParams.parsed === "demo";
+    const autoText =
+      auto > 0
+        ? ` — auto-applied to ${auto} matching job${auto === 1 ? "" : "s"} ⚡`
+        : "";
     messages.push({
       tone: "good",
-      text:
-        auto > 0
-          ? `Resume read and profile filled in — auto-applied to ${auto} matching job${auto === 1 ? "" : "s"}. ⚡ Check the details below and save any tweaks.`
-          : "Resume read and profile filled in. ✨ Check the details below and save any tweaks.",
+      text: isDemo
+        ? `Profile filled with sample data${autoText}. In the real version, Claude reads your actual resume here.`
+        : `Resume read and profile filled in${autoText}. Check the details below and save any tweaks.`,
+    });
+  }
+  if (searchParams.demo) {
+    messages.push({
+      tone: "good",
+      text: "You're in — this is the demo account. Try uploading any file as a resume and watch the profile build itself.",
     });
   }
   if (searchParams.saved) {

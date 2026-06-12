@@ -5,7 +5,9 @@ import {
 } from "@/lib/actions";
 import { getProfileByEmail } from "@/lib/data";
 import { NotConfiguredError } from "@/lib/google";
-import { authConfigured, safeAuth } from "@/lib/auth";
+import { authConfigured } from "@/lib/auth";
+import { demoActive, demoGetProfile, readDemoState } from "@/lib/demo";
+import { getCurrentUser } from "@/lib/user";
 import { Flash, SetupNotice } from "@/components/notices";
 import type { Row } from "@/lib/db";
 
@@ -29,17 +31,21 @@ export default async function ProfilePage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const sp = await searchParams;
-  const session = await safeAuth();
-  const email = session?.user?.email ?? "";
+  const user = await getCurrentUser();
+  const email = user?.email ?? "";
 
   let profile: Row | null = null;
   let notConfigured = false;
-  if (email) {
-    try {
-      profile = await getProfileByEmail(email);
-    } catch (err) {
-      if (err instanceof NotConfiguredError) notConfigured = true;
-      else throw err;
+  if (user) {
+    if (user.demo) {
+      profile = demoGetProfile(await readDemoState());
+    } else {
+      try {
+        profile = await getProfileByEmail(email);
+      } catch (err) {
+        if (err instanceof NotConfiguredError) notConfigured = true;
+        else throw err;
+      }
     }
   }
 
@@ -57,18 +63,19 @@ export default async function ProfilePage({
             Sign in to build your profile
           </p>
           <p className="mt-2 text-sm text-slate-600">
-            One click with Google — then upload your resume and the AI fills
-            everything in for you.
+            {demoActive
+              ? "One click — no account needed in the demo. Then upload any file as a resume and watch the profile build itself."
+              : "One click with Google — then upload your resume and the AI fills everything in for you."}
           </p>
           <form action={signInAction} className="mt-6">
             <button
               type="submit"
               className="rounded-lg bg-indigo-600 px-6 py-3 font-semibold text-white hover:bg-indigo-700"
             >
-              Sign in with Google
+              {demoActive ? "🧪 Try the demo" : "Sign in with Google"}
             </button>
           </form>
-          {!authConfigured && (
+          {!demoActive && !authConfigured && (
             <p className="mt-4 text-xs text-amber-700">
               ⚙️ Sign-in isn&apos;t configured yet — the Google login keys
               still need to be added in Vercel.
@@ -93,8 +100,9 @@ export default async function ProfilePage({
               ⚡ Upload your resume — the AI builds your profile
             </h2>
             <p className="mt-1 text-sm text-slate-600">
-              PDF, DOCX or TXT, up to 4 MB. It&apos;s stored safely in your
-              Drive and read once to fill in everything below.
+              {user?.demo
+                ? "Demo: pick any file — a sample profile is generated so you can see how it works. The real version reads your actual resume with AI and stores it in your Drive."
+                : "PDF, DOCX or TXT, up to 4 MB. It's stored safely in your Drive and read once to fill in everything below."}
             </p>
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <input
@@ -139,7 +147,7 @@ export default async function ProfilePage({
                 <input
                   name="name"
                   required
-                  defaultValue={profile?.name ?? session?.user?.name ?? ""}
+                  defaultValue={profile?.name ?? (user?.demo ? "" : user?.name) ?? ""}
                   className={`${inputClass} mt-1`}
                 />
               </label>

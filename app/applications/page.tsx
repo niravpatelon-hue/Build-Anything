@@ -1,7 +1,8 @@
 import { signInAction } from "@/lib/actions";
 import { listApplicationsForEmail } from "@/lib/data";
 import { NotConfiguredError } from "@/lib/google";
-import { safeAuth } from "@/lib/auth";
+import { demoActive, demoApplications, readDemoState } from "@/lib/demo";
+import { getCurrentUser } from "@/lib/user";
 import { Flash, SetupNotice } from "@/components/notices";
 import type { Row } from "@/lib/db";
 
@@ -13,17 +14,21 @@ export default async function ApplicationsPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const sp = await searchParams;
-  const session = await safeAuth();
-  const email = session?.user?.email ?? "";
+  const user = await getCurrentUser();
+  const email = user?.email ?? "";
 
   let applications: Row[] | null = null;
   let notConfigured = false;
-  if (email) {
-    try {
-      applications = await listApplicationsForEmail(email);
-    } catch (err) {
-      if (err instanceof NotConfiguredError) notConfigured = true;
-      else throw err;
+  if (user) {
+    if (user.demo) {
+      applications = demoApplications(await readDemoState());
+    } else {
+      try {
+        applications = await listApplicationsForEmail(email);
+      } catch (err) {
+        if (err instanceof NotConfiguredError) notConfigured = true;
+        else throw err;
+      }
     }
   }
 
@@ -42,7 +47,9 @@ export default async function ApplicationsPage({
             type="submit"
             className="rounded-lg bg-indigo-600 px-6 py-3 font-semibold text-white hover:bg-indigo-700"
           >
-            Sign in with Google to see your applications
+            {demoActive
+              ? "🧪 Try the demo to see applications"
+              : "Sign in with Google to see your applications"}
           </button>
         </form>
       )}
