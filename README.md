@@ -10,6 +10,32 @@ applied to jobs that match their preferences.
 - **Database:** Google Sheets via the Google Sheets API (service account)
 - **File storage:** Google Drive (resumes, documents) via the Google Drive API
 
+## How it works
+
+- **My Profile** — candidates save name, skills, preferred titles/locations and
+  a resume (uploaded to Google Drive), and switch auto-apply on.
+- **Jobs** — anyone can post a job. The moment a job is posted, every opted-in
+  profile that matches is applied automatically.
+- **My Applications** — candidates see everything they've been applied to.
+
+All data lives in the `auto-apply-job-portal-db` Google Sheet
+(tabs: `profiles`, `jobs`, `applications`). The app creates the Sheet, the
+Drive folders and all tabs by itself on first use.
+
+## One-time Google setup
+
+The app needs three environment variables (set them in Vercel → Project →
+Settings → Environment Variables):
+
+| Variable | What it is |
+| --- | --- |
+| `GOOGLE_SERVICE_ACCOUNT_EMAIL` | `client_email` from the service-account JSON key |
+| `GOOGLE_PRIVATE_KEY` | `private_key` from the same JSON key |
+| `GOOGLE_PROJECTS_FOLDER_ID` | ID of the Drive "Projects" folder shared with the service account |
+
+The service account needs the **Google Sheets API** and **Google Drive API**
+enabled, and Editor access to the "Projects" folder in Drive.
+
 ## Environments
 
 - `main` → production

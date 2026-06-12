@@ -21,13 +21,13 @@ export default function RootLayout({
               ⚡ Auto-Apply <span className="text-indigo-600">Job Portal</span>
             </a>
             <nav className="flex gap-6 text-sm font-medium text-slate-600">
-              <a href="/" className="hover:text-indigo-600">
+              <a href="/jobs" className="hover:text-indigo-600">
                 Jobs
               </a>
-              <a href="/" className="hover:text-indigo-600">
+              <a href="/profile" className="hover:text-indigo-600">
                 My Profile
               </a>
-              <a href="/" className="hover:text-indigo-600">
+              <a href="/applications" className="hover:text-indigo-600">
                 My Applications
               </a>
             </nav>
