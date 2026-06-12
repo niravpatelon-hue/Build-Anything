@@ -78,25 +78,53 @@ export async function autoApplyForProfile(profile: Row): Promise<number> {
   return count;
 }
 
-export async function saveProfile(input: {
-  name: string;
+export type ProfileInput = {
   email: string;
-  skills: string;
-  preferred_titles: string;
-  preferred_locations: string;
-  resume_link: string;
-  auto_apply: boolean;
-}): Promise<{ autoApplied: number }> {
+  name?: string;
+  phone?: string;
+  location?: string;
+  headline?: string;
+  summary?: string;
+  skills?: string;
+  preferred_titles?: string;
+  preferred_locations?: string;
+  experience?: string;
+  education?: string;
+  resume_link?: string;
+  auto_apply?: boolean;
+};
+
+/** Upserts a profile; fields left undefined keep their existing values. */
+export async function saveProfile(
+  input: ProfileInput
+): Promise<{ autoApplied: number }> {
   const existing = await getProfileByEmail(input.email);
+  const keep = (field: string, value: string | undefined) =>
+    value !== undefined ? value : (existing?.[field] ?? "");
+
   const data: Record<string, string> = {
     id: existing?.id ?? crypto.randomUUID(),
-    name: input.name,
     email: input.email.trim(),
-    skills: input.skills,
-    preferred_titles: input.preferred_titles,
-    preferred_locations: input.preferred_locations,
-    resume_link: input.resume_link || existing?.resume_link || "",
-    auto_apply: input.auto_apply ? "yes" : "no",
+    name: keep("name", input.name),
+    phone: keep("phone", input.phone),
+    location: keep("location", input.location),
+    headline: keep("headline", input.headline),
+    summary: keep("summary", input.summary),
+    skills: keep("skills", input.skills),
+    preferred_titles: keep("preferred_titles", input.preferred_titles),
+    preferred_locations: keep(
+      "preferred_locations",
+      input.preferred_locations
+    ),
+    experience: keep("experience", input.experience),
+    education: keep("education", input.education),
+    resume_link: keep("resume_link", input.resume_link),
+    auto_apply:
+      input.auto_apply !== undefined
+        ? input.auto_apply
+          ? "yes"
+          : "no"
+        : existing?.auto_apply || "yes",
     created_at: existing?.created_at || new Date().toISOString(),
   };
 
@@ -107,7 +135,7 @@ export async function saveProfile(input: {
   }
 
   let autoApplied = 0;
-  if (input.auto_apply) {
+  if (data.auto_apply === "yes") {
     autoApplied = await autoApplyForProfile({ ...data, _row: 0 } as Row);
   }
   return { autoApplied };

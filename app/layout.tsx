@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { safeAuth } from "@/lib/auth";
+import { signInAction, signOutAction } from "@/lib/actions";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -7,11 +9,14 @@ export const metadata: Metadata = {
     "Set up your profile once — the portal applies to matching jobs for you.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const session = await safeAuth();
+  const firstName = session?.user?.name?.split(" ")[0];
+
   return (
     <html lang="en">
       <body>
@@ -20,7 +25,7 @@ export default function RootLayout({
             <a href="/" className="text-lg font-bold tracking-tight">
               ⚡ Auto-Apply <span className="text-indigo-600">Job Portal</span>
             </a>
-            <nav className="flex gap-6 text-sm font-medium text-slate-600">
+            <nav className="flex items-center gap-6 text-sm font-medium text-slate-600">
               <a href="/jobs" className="hover:text-indigo-600">
                 Jobs
               </a>
@@ -30,6 +35,28 @@ export default function RootLayout({
               <a href="/applications" className="hover:text-indigo-600">
                 My Applications
               </a>
+              {session ? (
+                <form action={signOutAction} className="flex items-center gap-2">
+                  <span className="hidden text-slate-500 sm:inline">
+                    Hi, {firstName ?? "there"}
+                  </span>
+                  <button
+                    type="submit"
+                    className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold hover:border-indigo-400"
+                  >
+                    Sign out
+                  </button>
+                </form>
+              ) : (
+                <form action={signInAction}>
+                  <button
+                    type="submit"
+                    className="rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700"
+                  >
+                    Sign in
+                  </button>
+                </form>
+              )}
             </nav>
           </div>
         </header>

@@ -1,6 +1,7 @@
 import { applyAction, postJobAction } from "@/lib/actions";
 import { listOpenJobs } from "@/lib/data";
 import { NotConfiguredError } from "@/lib/google";
+import { safeAuth } from "@/lib/auth";
 import { Flash, SetupNotice } from "@/components/notices";
 import type { Row } from "@/lib/db";
 
@@ -15,6 +16,7 @@ export default async function JobsPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const sp = await searchParams;
+  const session = await safeAuth();
 
   let jobs: Row[] | null = null;
   let notConfigured = false;
@@ -85,22 +87,24 @@ export default async function JobsPage({
                 {job.description}
               </p>
             )}
-            <form action={applyAction} className="mt-4 flex flex-wrap gap-2">
-              <input type="hidden" name="job_id" value={job.id} />
-              <input
-                type="email"
-                name="email"
-                required
-                placeholder="Your profile email"
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
-              />
-              <button
-                type="submit"
-                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+            {session?.user?.email ? (
+              <form action={applyAction} className="mt-4">
+                <input type="hidden" name="job_id" value={job.id} />
+                <button
+                  type="submit"
+                  className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
+                >
+                  Apply with my profile
+                </button>
+              </form>
+            ) : (
+              <a
+                href="/profile"
+                className="mt-4 inline-block rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:border-indigo-400"
               >
-                Apply
-              </button>
-            </form>
+                Sign in to apply
+              </a>
+            )}
           </div>
         ))}
       </div>

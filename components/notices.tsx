@@ -39,6 +39,16 @@ export function Flash({
   if (searchParams.applied) {
     messages.push({ tone: "good", text: searchParams.applied });
   }
+  if (searchParams.parsed) {
+    const auto = Number(searchParams.auto ?? 0);
+    messages.push({
+      tone: "good",
+      text:
+        auto > 0
+          ? `Resume read and profile filled in — auto-applied to ${auto} matching job${auto === 1 ? "" : "s"}. ⚡ Check the details below and save any tweaks.`
+          : "Resume read and profile filled in. ✨ Check the details below and save any tweaks.",
+    });
+  }
   if (searchParams.saved) {
     const auto = Number(searchParams.auto ?? 0);
     messages.push({

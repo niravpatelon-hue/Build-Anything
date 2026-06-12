@@ -1,5 +1,7 @@
+import { signInAction } from "@/lib/actions";
 import { listApplicationsForEmail } from "@/lib/data";
 import { NotConfiguredError } from "@/lib/google";
+import { safeAuth } from "@/lib/auth";
 import { Flash, SetupNotice } from "@/components/notices";
 import type { Row } from "@/lib/db";
 
@@ -11,7 +13,8 @@ export default async function ApplicationsPage({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const sp = await searchParams;
-  const email = sp.email?.trim() ?? "";
+  const session = await safeAuth();
+  const email = session?.user?.email ?? "";
 
   let applications: Row[] | null = null;
   let notConfigured = false;
@@ -29,33 +32,27 @@ export default async function ApplicationsPage({
       <Flash searchParams={sp} />
       <h1 className="text-2xl font-bold">My applications</h1>
       <p className="mt-2 text-sm text-slate-600">
-        Enter your email to see every application — including the ones
-        auto-apply filed for you.
+        Every application in one place — including the ones auto-apply filed
+        for you.
       </p>
 
-      <form method="get" className="mt-4 flex gap-2">
-        <input
-          type="email"
-          name="email"
-          required
-          defaultValue={email}
-          placeholder="you@example.com"
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
-        />
-        <button
-          type="submit"
-          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
-        >
-          Show
-        </button>
-      </form>
+      {!email && (
+        <form action={signInAction} className="mt-6">
+          <button
+            type="submit"
+            className="rounded-lg bg-indigo-600 px-6 py-3 font-semibold text-white hover:bg-indigo-700"
+          >
+            Sign in with Google to see your applications
+          </button>
+        </form>
+      )}
 
       <div className="mt-6">
         {notConfigured && <SetupNotice />}
         {applications && applications.length === 0 && (
           <p className="rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-500">
-            No applications yet for {email}. Turn on auto-apply in your profile
-            and they'll start appearing here.
+            No applications yet. Turn on auto-apply in your profile and
+            they&apos;ll start appearing here.
           </p>
         )}
         {applications && applications.length > 0 && (
