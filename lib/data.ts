@@ -7,12 +7,19 @@ function splitList(value: string): string[] {
     .filter(Boolean);
 }
 
+type MatchableJob = {
+  title?: string;
+  description?: string;
+  location?: string;
+  [key: string]: string | number | undefined;
+};
+
 /**
  * A profile matches a job when at least one preferred title appears in the
  * job title, or one skill appears in the title/description — and, if the
  * profile lists preferred locations, the job location matches one of them.
  */
-export function matches(profile: Row, job: Row): boolean {
+export function matches(profile: Row, job: MatchableJob): boolean {
   const titles = splitList(profile.preferred_titles ?? "");
   const skills = splitList(profile.skills ?? "");
   const jobTitle = (job.title ?? "").toLowerCase();
@@ -45,6 +52,8 @@ async function fileApplication(
     candidate_email: profile.email,
     status: "submitted",
     auto: auto ? "yes" : "no",
+    source: job.source ?? "",
+    apply_link: job.apply_link ?? "",
     applied_at: new Date().toISOString(),
   });
 }
@@ -203,7 +212,92 @@ export async function applyManually(
 
 export async function listOpenJobs(): Promise<Row[]> {
   const jobs = await readRows("jobs");
-  return jobs.filter((j) => j.status === "open").reverse();
+  return jobs
+    .filter((j) => j.status === "open" && !j.external_id)
+    .reverse();
+}
+
+/** Search results live outside the portal — importing one makes it trackable. */
+async function importExternalJob(result: {
+  external_id: string;
+  title: string;
+  company: string;
+  location: string;
+  salary: string;
+  description: string;
+  source: string;
+  apply_link: string;
+}): Promise<Row> {
+  const jobs = await readRows("jobs");
+  const existing = jobs.find((j) => j.external_id === result.external_id);
+  if (existing) return existing;
+
+  const job: Record<string, string> = {
+    id: crypto.randomUUID(),
+    title: result.title,
+    company: result.company,
+    location: result.location,
+    salary: result.salary,
+    description: result.description,
+    status: "open",
+    source: result.source,
+    apply_link: result.apply_link,
+    external_id: result.external_id,
+    created_at: new Date().toISOString(),
+  };
+  await appendRow("jobs", job);
+  return { ...job, _row: 0 } as Row;
+}
+
+export async function applyToExternalJob(
+  email: string,
+  result: Parameters<typeof importExternalJob>[0]
+): Promise<{ ok: boolean; message: string }> {
+  const profile = await getProfileByEmail(email);
+  if (!profile) {
+    return {
+      ok: false,
+      message: "Set up your profile first — it's what gets submitted.",
+    };
+  }
+  const job = await importExternalJob(result);
+  const applications = await readRows("applications");
+  if (
+    applications.some(
+      (a) => a.job_id === job.id && a.profile_id === profile.id
+    )
+  ) {
+    return { ok: false, message: "You already applied to that job." };
+  }
+  await fileApplication(profile, job, false);
+  return {
+    ok: true,
+    message: `Applied to ${job.title} at ${job.company} — it's now tracked in My Applications.`,
+  };
+}
+
+/** Files applications for every search result that matches the profile. */
+export async function autoApplyToSearchResults(
+  email: string,
+  results: Parameters<typeof importExternalJob>[0][]
+): Promise<number> {
+  const profile = await getProfileByEmail(email);
+  if (!profile) return 0;
+  const applications = await readRows("applications");
+  const appliedJobIds = new Set(
+    applications.filter((a) => a.profile_id === profile.id).map((a) => a.job_id)
+  );
+
+  let count = 0;
+  for (const result of results) {
+    if (!matches(profile, result)) continue;
+    const job = await importExternalJob(result);
+    if (appliedJobIds.has(job.id)) continue;
+    await fileApplication(profile, job, true);
+    appliedJobIds.add(job.id);
+    count++;
+  }
+  return count;
 }
 
 export async function listApplicationsForEmail(email: string): Promise<Row[]> {

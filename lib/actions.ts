@@ -5,13 +5,27 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { getGoogleClients, NotConfiguredError } from "./google";
 import { getInfra } from "./db";
-import { applyManually, postJob, saveProfile } from "./data";
+import {
+  applyManually,
+  applyToExternalJob,
+  autoApplyToSearchResults,
+  postJob,
+  saveProfile,
+} from "./data";
 import { AINotConfiguredError, parseResume } from "./ai";
 import { authConfigured, signIn, signOut } from "./auth";
+import {
+  demoSearchJobs,
+  searchJobs,
+  SearchNotConfiguredError,
+  type SearchResult,
+} from "./jobsearch";
 import {
   DEMO_PARSED,
   demoActive,
   demoApply,
+  demoApplyExternal,
+  demoAutoApplySearch,
   demoPostJob,
   demoSaveProfile,
   readDemoState,
@@ -27,6 +41,9 @@ function friendlyError(err: unknown): string {
   }
   if (err instanceof AINotConfiguredError) {
     return "The AI isn't connected yet — add ANTHROPIC_API_KEY in Vercel, redeploy, then try again.";
+  }
+  if (err instanceof SearchNotConfiguredError) {
+    return "Job search isn't connected yet — add RAPIDAPI_KEY in Vercel, redeploy, then try again.";
   }
   if (err instanceof Error && err.message.length < 200) {
     return err.message;
@@ -225,6 +242,83 @@ export async function postJobAction(formData: FormData): Promise<void> {
   } catch (err) {
     if (isNextRedirect(err)) throw err;
     target = `/jobs?error=${encodeURIComponent(friendlyError(err))}`;
+  }
+  redirect(target);
+}
+
+/** Apply to one job found by the internet-wide search. */
+export async function applyExternalAction(formData: FormData): Promise<void> {
+  const q = String(formData.get("q") ?? "");
+  const loc = String(formData.get("loc") ?? "");
+  const back = `/search?q=${encodeURIComponent(q)}&loc=${encodeURIComponent(loc)}`;
+
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect(
+      `${back}&error=${encodeURIComponent(
+        "Sign in first — your profile is what gets submitted."
+      )}`
+    );
+  }
+
+  let target: string;
+  try {
+    const job = JSON.parse(
+      String(formData.get("job") ?? "{}")
+    ) as SearchResult;
+    if (!job.external_id) throw new Error("That job can't be applied to.");
+
+    let result: { ok: boolean; message: string };
+    if (user!.demo) {
+      const state = await readDemoState();
+      result = demoApplyExternal(state, job);
+      await writeDemoState(state);
+    } else {
+      result = await applyToExternalJob(user!.email, job);
+    }
+    target = `${back}&${result.ok ? "applied" : "error"}=${encodeURIComponent(
+      result.message
+    )}`;
+  } catch (err) {
+    if (isNextRedirect(err)) throw err;
+    target = `${back}&error=${encodeURIComponent(friendlyError(err))}`;
+  }
+  redirect(target);
+}
+
+/** Re-runs the search server-side and applies to everything that matches. */
+export async function autoApplySearchAction(
+  formData: FormData
+): Promise<void> {
+  const q = String(formData.get("q") ?? "");
+  const loc = String(formData.get("loc") ?? "");
+  const back = `/search?q=${encodeURIComponent(q)}&loc=${encodeURIComponent(loc)}`;
+
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect(
+      `${back}&error=${encodeURIComponent(
+        "Sign in first — your profile is what gets submitted."
+      )}`
+    );
+  }
+
+  let target: string;
+  try {
+    if (user!.demo) {
+      const state = await readDemoState();
+      const results = demoSearchJobs(q, loc);
+      const count = demoAutoApplySearch(state, results);
+      await writeDemoState(state);
+      target = `${back}&auto_done=${count}`;
+    } else {
+      const results = await searchJobs(q, loc);
+      const count = await autoApplyToSearchResults(user!.email, results);
+      target = `${back}&auto_done=${count}`;
+    }
+  } catch (err) {
+    if (isNextRedirect(err)) throw err;
+    target = `${back}&error=${encodeURIComponent(friendlyError(err))}`;
   }
   redirect(target);
 }

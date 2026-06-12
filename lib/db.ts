@@ -29,6 +29,9 @@ export const TABS = {
     "salary",
     "description",
     "status",
+    "source",
+    "apply_link",
+    "external_id",
     "created_at",
   ],
   applications: [
@@ -41,6 +44,8 @@ export const TABS = {
     "candidate_email",
     "status",
     "auto",
+    "source",
+    "apply_link",
     "applied_at",
   ],
 } as const;

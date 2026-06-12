@@ -16,15 +16,15 @@ export default function Home() {
           Set up my profile
         </a>
         <a
-          href="/jobs"
+          href="/search"
           className="rounded-lg border border-slate-300 bg-white px-5 py-3 font-semibold text-slate-700 hover:border-indigo-400"
         >
-          Browse jobs
+          Find jobs
         </a>
       </div>
       <div className="mt-12 grid w-full gap-4 sm:grid-cols-3">
         {[
-          ["📋", "Browse jobs", "See every open role in one place.", "/jobs"],
+          ["🔎", "Search the web", "Jobs from LinkedIn, Indeed, Glassdoor and more.", "/search"],
           ["👤", "One profile", "Your details and resume, saved once.", "/profile"],
           ["⚡", "Auto-apply", "Matching jobs get your application instantly.", "/applications"],
         ].map(([icon, title, text, href]) => (

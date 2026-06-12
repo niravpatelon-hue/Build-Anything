@@ -53,6 +53,20 @@ export function Flash({
         : `Resume read and profile filled in${autoText}. Check the details below and save any tweaks.`,
     });
   }
+  if (searchParams.auto_done !== undefined) {
+    const n = Number(searchParams.auto_done);
+    messages.push(
+      n > 0
+        ? {
+            tone: "good",
+            text: `⚡ Auto-applied to ${n} matching job${n === 1 ? "" : "s"} — all tracked in My Applications.`,
+          }
+        : {
+            tone: "good",
+            text: "No new matches to apply to — you've already covered everything that fits.",
+          }
+    );
+  }
   if (searchParams.demo) {
     messages.push({
       tone: "good",

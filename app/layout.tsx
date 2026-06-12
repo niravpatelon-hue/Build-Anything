@@ -34,8 +34,11 @@ export default async function RootLayout({
               ⚡ Auto-Apply <span className="text-indigo-600">Job Portal</span>
             </a>
             <nav className="flex items-center gap-6 text-sm font-medium text-slate-600">
+              <a href="/search" className="hover:text-indigo-600">
+                Find Jobs
+              </a>
               <a href="/jobs" className="hover:text-indigo-600">
-                Jobs
+                Job Board
               </a>
               <a href="/profile" className="hover:text-indigo-600">
                 My Profile

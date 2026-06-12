@@ -151,6 +151,8 @@ type DemoApp = {
   company: string;
   status: string;
   auto: string;
+  source?: string;
+  apply_link?: string;
   applied_at: string;
 };
 
@@ -199,19 +201,21 @@ export function demoGetProfile(state: DemoState): Row | null {
 
 function fileDemoApplication(
   state: DemoState,
-  job: Row,
+  job: { [key: string]: string | number | undefined },
   auto: boolean
 ): void {
   state.apps.unshift({
     id: crypto.randomUUID(),
-    job_id: job.id,
-    job_title: job.title,
-    company: job.company,
+    job_id: String(job.id ?? ""),
+    job_title: String(job.title ?? ""),
+    company: String(job.company ?? ""),
     status: "submitted",
     auto: auto ? "yes" : "no",
+    source: String(job.source ?? ""),
+    apply_link: String(job.apply_link ?? ""),
     applied_at: new Date().toISOString(),
   });
-  state.apps = state.apps.slice(0, 20);
+  state.apps = state.apps.slice(0, 30);
 }
 
 function demoAutoApply(state: DemoState): number {
@@ -297,6 +301,75 @@ export function demoPostJob(
   } as unknown as Row);
   state.jobs = state.jobs.slice(0, 5);
   return demoAutoApply(state);
+}
+
+type ExternalJob = {
+  external_id: string;
+  title: string;
+  company: string;
+  location: string;
+  salary: string;
+  description: string;
+  source: string;
+  apply_link: string;
+};
+
+export function demoApplyExternal(
+  state: DemoState,
+  result: ExternalJob
+): { ok: boolean; message: string } {
+  const profile = demoGetProfile(state);
+  if (!profile || !profile.name) {
+    return {
+      ok: false,
+      message: "Set up your profile first — it's what gets submitted.",
+    };
+  }
+  if (state.apps.some((a) => a.job_id === result.external_id)) {
+    return { ok: false, message: "You already applied to that job." };
+  }
+  fileDemoApplication(
+    state,
+    {
+      id: result.external_id,
+      title: result.title,
+      company: result.company,
+      source: result.source,
+      apply_link: result.apply_link,
+    },
+    false
+  );
+  return {
+    ok: true,
+    message: `Applied to ${result.title} at ${result.company} — it's now tracked in My Applications.`,
+  };
+}
+
+export function demoAutoApplySearch(
+  state: DemoState,
+  results: ExternalJob[]
+): number {
+  const profile = demoGetProfile(state);
+  if (!profile || profile.auto_apply !== "yes") return 0;
+  const applied = new Set(state.apps.map((a) => a.job_id));
+  let count = 0;
+  for (const result of results) {
+    if (applied.has(result.external_id)) continue;
+    if (!matches(profile, result)) continue;
+    fileDemoApplication(
+      state,
+      {
+        id: result.external_id,
+        title: result.title,
+        company: result.company,
+        source: result.source,
+        apply_link: result.apply_link,
+      },
+      true
+    );
+    count++;
+  }
+  return count;
 }
 
 export function demoApplications(state: DemoState): Row[] {

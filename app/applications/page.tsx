@@ -77,7 +77,25 @@ export default async function ApplicationsPage({
               <tbody className="divide-y divide-slate-100">
                 {applications.map((a) => (
                   <tr key={a.id}>
-                    <td className="px-4 py-3 font-medium">{a.job_title}</td>
+                    <td className="px-4 py-3 font-medium">
+                      {a.apply_link ? (
+                        <a
+                          href={a.apply_link}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="hover:text-indigo-600 hover:underline"
+                        >
+                          {a.job_title} ↗
+                        </a>
+                      ) : (
+                        a.job_title
+                      )}
+                      {a.source && (
+                        <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 text-xs font-normal text-slate-500">
+                          {a.source}
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-slate-600">{a.company}</td>
                     <td className="px-4 py-3">
                       <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700">
