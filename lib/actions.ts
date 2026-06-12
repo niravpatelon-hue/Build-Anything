@@ -9,10 +9,19 @@ import {
   applyManually,
   applyToExternalJob,
   autoApplyToSearchResults,
+  getApplicationForEmail,
+  getProfileByEmail,
   postJob,
   saveProfile,
+  updateApplication,
 } from "./data";
-import { AINotConfiguredError, parseResume } from "./ai";
+import {
+  AINotConfiguredError,
+  analyzeFit,
+  parseResume,
+  tailorDocuments,
+} from "./ai";
+import { createGoogleDoc } from "./gdocs";
 import { authConfigured, signIn, signOut } from "./auth";
 import {
   demoSearchJobs,
@@ -23,11 +32,16 @@ import {
 import {
   DEMO_PARSED,
   demoActive,
+  demoAnalysis,
   demoApply,
   demoApplyExternal,
   demoAutoApplySearch,
+  demoFindApp,
   demoPostJob,
   demoSaveProfile,
+  demoSetAppAnalysis,
+  demoSetAppDocs,
+  demoSetAppStatus,
   readDemoState,
   writeDemoState,
 } from "./demo";
@@ -145,8 +159,6 @@ export async function uploadResumeAction(formData: FormData): Promise<void> {
         skills: DEMO_PARSED.skills.join(", "),
         preferred_titles: DEMO_PARSED.suggested_titles.join(", "),
         preferred_locations: "london, remote",
-        experience: JSON.stringify(DEMO_PARSED.experience),
-        education: JSON.stringify(DEMO_PARSED.education),
       });
       await writeDemoState(state);
       target = `/profile?parsed=demo&auto=${autoApplied}`;
@@ -316,6 +328,128 @@ export async function autoApplySearchAction(
       const count = await autoApplyToSearchResults(user!.email, results);
       target = `${back}&auto_done=${count}`;
     }
+  } catch (err) {
+    if (isNextRedirect(err)) throw err;
+    target = `${back}&error=${encodeURIComponent(friendlyError(err))}`;
+  }
+  redirect(target);
+}
+
+const APP_STATUSES = [
+  "submitted",
+  "in review",
+  "interview",
+  "offer",
+  "rejected",
+  "closed",
+];
+
+/** AI fit check: profile vs job description, with suggested resume fixes. */
+export async function analyzeApplicationAction(
+  formData: FormData
+): Promise<void> {
+  const user = await requireUser();
+  const id = String(formData.get("id") ?? "");
+  const back = `/applications/prepare?id=${encodeURIComponent(id)}`;
+  let target: string;
+  try {
+    if (user.demo) {
+      const state = await readDemoState();
+      if (!demoSetAppAnalysis(state, id)) {
+        throw new Error("Application not found.");
+      }
+      await writeDemoState(state);
+    } else {
+      const found = await getApplicationForEmail(user.email, id);
+      if (!found) throw new Error("Application not found.");
+      const profile = await getProfileByEmail(user.email);
+      if (!profile) throw new Error("Set up your profile first.");
+      const job = found.job ?? {
+        title: found.app.job_title,
+        company: found.app.company,
+        location: "",
+        description: "",
+      };
+      const analysis = await analyzeFit(profile, job);
+      await updateApplication(found.app, {
+        analysis: JSON.stringify(analysis),
+      });
+    }
+    target = `${back}&analyzed=1`;
+  } catch (err) {
+    if (isNextRedirect(err)) throw err;
+    target = `${back}&error=${encodeURIComponent(friendlyError(err))}`;
+  }
+  redirect(target);
+}
+
+/** Applies the agreed fixes: tailored resume + cover letter, saved to Drive. */
+export async function generateDocsAction(formData: FormData): Promise<void> {
+  const user = await requireUser();
+  const id = String(formData.get("id") ?? "");
+  const back = `/applications/prepare?id=${encodeURIComponent(id)}`;
+  let target: string;
+  try {
+    if (user.demo) {
+      const state = await readDemoState();
+      const app = demoFindApp(state, id);
+      if (!app) throw new Error("Application not found.");
+      if (!app.analysis) throw new Error("Run the fit check first.");
+      demoSetAppDocs(state, id);
+      await writeDemoState(state);
+    } else {
+      const found = await getApplicationForEmail(user.email, id);
+      if (!found) throw new Error("Application not found.");
+      if (!found.app.analysis) throw new Error("Run the fit check first.");
+      const profile = await getProfileByEmail(user.email);
+      if (!profile) throw new Error("Set up your profile first.");
+      const job = found.job ?? {
+        title: found.app.job_title,
+        company: found.app.company,
+        location: "",
+        description: "",
+      };
+      const fixes = (JSON.parse(found.app.analysis) as { fixes?: string[] })
+        .fixes ?? [];
+      const docs = await tailorDocuments(profile, job, fixes);
+      const label = `${found.app.job_title} — ${found.app.company}`;
+      const [resumeLink, letterLink] = await Promise.all([
+        createGoogleDoc(`${label} — Tailored Resume`, docs.tailored_resume),
+        createGoogleDoc(`${label} — Cover Letter`, docs.cover_letter),
+      ]);
+      await updateApplication(found.app, {
+        tailored_resume_link: resumeLink,
+        cover_letter_link: letterLink,
+      });
+    }
+    target = `${back}&docs=1`;
+  } catch (err) {
+    if (isNextRedirect(err)) throw err;
+    target = `${back}&error=${encodeURIComponent(friendlyError(err))}`;
+  }
+  redirect(target);
+}
+
+export async function updateStatusAction(formData: FormData): Promise<void> {
+  const user = await requireUser();
+  const id = String(formData.get("id") ?? "");
+  const status = String(formData.get("status") ?? "");
+  const back = `/applications/prepare?id=${encodeURIComponent(id)}`;
+  let target: string;
+  try {
+    if (!APP_STATUSES.includes(status)) throw new Error("Pick a status.");
+    if (user.demo) {
+      const state = await readDemoState();
+      if (!demoSetAppStatus(state, id, status)) {
+        throw new Error("Application not found.");
+      }
+      await writeDemoState(state);
+    } else {
+      const found = await getApplicationForEmail(user.email, id);
+      if (!found) throw new Error("Application not found.");
+      await updateApplication(found.app, { status });
+    }
+    target = `${back}&status_saved=1`;
   } catch (err) {
     if (isNextRedirect(err)) throw err;
     target = `${back}&error=${encodeURIComponent(friendlyError(err))}`;

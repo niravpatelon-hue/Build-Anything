@@ -105,7 +105,7 @@ export async function searchJobs(
 }
 
 /** Sample search results shown in demo mode (no key needed). */
-const DEMO_SEARCH_POOL: SearchResult[] = [
+export const DEMO_SEARCH_POOL: SearchResult[] = [
   {
     external_id: "ext-demo-1",
     title: "Data Analyst",

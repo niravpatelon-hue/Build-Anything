@@ -12,11 +12,19 @@ applied to jobs that match their preferences.
 
 ## How it works
 
-- **My Profile** — candidates save name, skills, preferred titles/locations and
-  a resume (uploaded to Google Drive), and switch auto-apply on.
-- **Jobs** — anyone can post a job. The moment a job is posted, every opted-in
-  profile that matches is applied automatically.
-- **My Applications** — candidates see everything they've been applied to.
+- **My Profile** — sign in with Google, upload a resume (stored in Drive) and
+  the AI reads it into a full profile. Auto-apply on by default.
+- **Find Jobs** — searches listings from across the web (LinkedIn, Indeed,
+  Glassdoor, company pages via the JSearch aggregator); one-click
+  apply-and-track, plus bulk auto-apply to everything that matches.
+- **Job Board** — jobs posted inside the portal; new posts auto-apply every
+  matching opted-in profile.
+- **My Applications** — every application tracked with status. Each one has a
+  Prepare workspace: AI fit check (score, strengths, gaps, suggested fixes),
+  then one click writes a tailored resume + cover letter saved as Google Docs
+  in Drive.
+- **Demo mode** — until credentials are configured the whole portal runs on
+  sample data (cookie-based, max 4KB) so it can be explored with zero setup.
 
 All data lives in the `auto-apply-job-portal-db` Google Sheet
 (tabs: `profiles`, `jobs`, `applications`). The app creates the Sheet, the
@@ -35,7 +43,8 @@ Settings → Environment Variables):
 | `AUTH_SECRET` | Random string used to secure sign-in sessions |
 | `AUTH_GOOGLE_ID` | OAuth client ID (Google Cloud → Credentials) |
 | `AUTH_GOOGLE_SECRET` | OAuth client secret |
-| `ANTHROPIC_API_KEY` | Claude API key (console.anthropic.com) — powers resume reading and, later, resume tailoring, cover letters and interview prep |
+| `ANTHROPIC_API_KEY` | Claude API key (console.anthropic.com) — powers resume reading, fit checks, resume tailoring and cover letters |
+| `RAPIDAPI_KEY` | RapidAPI key subscribed to JSearch (free tier) — powers internet-wide job search |
 
 The service account needs the **Google Sheets API** and **Google Drive API**
 enabled, and Editor access to the "Projects" folder in Drive. The OAuth

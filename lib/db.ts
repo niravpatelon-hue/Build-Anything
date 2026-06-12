@@ -46,6 +46,9 @@ export const TABS = {
     "auto",
     "source",
     "apply_link",
+    "analysis",
+    "tailored_resume_link",
+    "cover_letter_link",
     "applied_at",
   ],
 } as const;
@@ -57,6 +60,7 @@ type Infra = {
   spreadsheetId: string;
   projectFolderId: string;
   uploadsFolderId: string;
+  applicationsFolderId: string;
 };
 
 let infraPromise: Promise<Infra> | null = null;
@@ -101,6 +105,11 @@ async function setupInfra(): Promise<Infra> {
   const uploadsFolderId = await findOrCreateFolder(
     drive,
     "uploads",
+    projectFolderId
+  );
+  const applicationsFolderId = await findOrCreateFolder(
+    drive,
+    "applications",
     projectFolderId
   );
 
@@ -176,7 +185,12 @@ async function setupInfra(): Promise<Infra> {
     }
   }
 
-  return { spreadsheetId, projectFolderId, uploadsFolderId };
+  return {
+    spreadsheetId,
+    projectFolderId,
+    uploadsFolderId,
+    applicationsFolderId,
+  };
 }
 
 export function getInfra(): Promise<Infra> {

@@ -72,6 +72,7 @@ export default async function ApplicationsPage({
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">How</th>
                   <th className="px-4 py-3">Date</th>
+                  <th className="px-4 py-3"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -107,6 +108,14 @@ export default async function ApplicationsPage({
                     </td>
                     <td className="px-4 py-3 text-slate-500">
                       {a.applied_at ? a.applied_at.slice(0, 10) : ""}
+                    </td>
+                    <td className="px-4 py-3">
+                      <a
+                        href={`/applications/prepare?id=${a.id}`}
+                        className="font-semibold text-indigo-600 hover:underline"
+                      >
+                        Prepare ▸
+                      </a>
                     </td>
                   </tr>
                 ))}

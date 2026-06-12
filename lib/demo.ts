@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { matches } from "./data";
+import { DEMO_SEARCH_POOL } from "./jobsearch";
 import type { Row } from "./db";
 import type { ParsedResume } from "./ai";
 
@@ -153,6 +154,8 @@ type DemoApp = {
   auto: string;
   source?: string;
   apply_link?: string;
+  analysis?: string;
+  docs?: string;
   applied_at: string;
 };
 
@@ -196,7 +199,15 @@ export function demoAllJobs(state: DemoState): Row[] {
 }
 
 export function demoGetProfile(state: DemoState): Row | null {
-  return state.profile ? ({ ...state.profile, _row: 0 } as Row) : null;
+  if (!state.profile) return null;
+  // Experience/education aren't stored in the 4KB cookie — they're always
+  // the canned sample in demo mode, so reconstitute them here.
+  return {
+    ...state.profile,
+    experience: JSON.stringify(DEMO_PARSED.experience),
+    education: JSON.stringify(DEMO_PARSED.education),
+    _row: 0,
+  } as unknown as Row;
 }
 
 function fileDemoApplication(
@@ -204,16 +215,16 @@ function fileDemoApplication(
   job: { [key: string]: string | number | undefined },
   auto: boolean
 ): void {
+  // Everything lives in a 4KB cookie: keep entries minimal — source and
+  // apply_link are re-joined from the job lookup when displayed.
   state.apps.unshift({
-    id: crypto.randomUUID(),
+    id: Math.random().toString(36).slice(2, 10),
     job_id: String(job.id ?? ""),
     job_title: String(job.title ?? ""),
     company: String(job.company ?? ""),
     status: "submitted",
     auto: auto ? "yes" : "no",
-    source: String(job.source ?? ""),
-    apply_link: String(job.apply_link ?? ""),
-    applied_at: new Date().toISOString(),
+    applied_at: new Date().toISOString().slice(0, 10),
   });
   state.apps = state.apps.slice(0, 30);
 }
@@ -238,8 +249,10 @@ export function demoSaveProfile(
 ): number {
   const existing = state.profile ?? {};
   const keep = (field: string) => input[field] ?? existing[field] ?? "";
+  // experience/education are intentionally NOT stored (cookie size) —
+  // demoGetProfile reconstitutes the canned sample.
   state.profile = {
-    id: existing.id ?? crypto.randomUUID(),
+    id: existing.id ?? Math.random().toString(36).slice(2, 10),
     email: DEMO_USER.email,
     name: keep("name"),
     phone: keep("phone"),
@@ -249,11 +262,9 @@ export function demoSaveProfile(
     skills: keep("skills"),
     preferred_titles: keep("preferred_titles"),
     preferred_locations: keep("preferred_locations"),
-    experience: keep("experience"),
-    education: keep("education"),
     resume_link: keep("resume_link"),
     auto_apply: input.auto_apply ?? existing.auto_apply ?? "yes",
-    created_at: existing.created_at ?? new Date().toISOString(),
+    created_at: existing.created_at ?? new Date().toISOString().slice(0, 10),
   };
   return demoAutoApply(state);
 }
@@ -372,6 +383,102 @@ export function demoAutoApplySearch(
   return count;
 }
 
+export function demoFindApp(state: DemoState, id: string): DemoApp | null {
+  return state.apps.find((a) => a.id === id) ?? null;
+}
+
+/** Looks a job up across the board, posted jobs, and the search sample pool. */
+export function demoFindJob(state: DemoState, jobId: string): Row | null {
+  const board = demoAllJobs(state).find((j) => j.id === jobId);
+  if (board) return board;
+  const pooled = DEMO_SEARCH_POOL_LOOKUP[jobId];
+  return pooled ?? null;
+}
+
+export function demoSetAppStatus(
+  state: DemoState,
+  id: string,
+  status: string
+): boolean {
+  const app = demoFindApp(state, id);
+  if (!app) return false;
+  app.status = status;
+  return true;
+}
+
+export function demoSetAppAnalysis(state: DemoState, id: string): boolean {
+  const app = demoFindApp(state, id);
+  if (!app) return false;
+  app.analysis = "1"; // flag only — the canned analysis is rebuilt on view
+  return true;
+}
+
+export function demoSetAppDocs(state: DemoState, id: string): boolean {
+  const app = demoFindApp(state, id);
+  if (!app) return false;
+  app.docs = "1";
+  return true;
+}
+
+/** Canned fit analysis used while the AI key isn't connected. */
+export function demoAnalysis(jobTitle: string, company: string) {
+  return {
+    match_score: 84,
+    strengths: [
+      `Six years of analyst experience lines up directly with the ${jobTitle} role.`,
+      "SQL, Excel and Power BI cover the core tools in the job description.",
+      "Track record of automating reporting — a clear win to lead with.",
+    ],
+    gaps: [
+      `No ${company} industry experience mentioned — worth addressing in the cover letter.`,
+      "Python appears in the description but only lightly on the resume.",
+    ],
+    fixes: [
+      "Move the reporting-automation achievement to the top of your summary.",
+      `Mirror the exact phrase “${jobTitle}” in your headline.`,
+      "Quantify the month-end automation win (3 days saved per cycle).",
+      "List Power BI before Excel in your skills line for this role.",
+    ],
+  };
+}
+
+/** Canned tailored documents for demo mode — generated fresh each view. */
+export function demoTailoredDocs(name: string, jobTitle: string, company: string) {
+  return {
+    tailored_resume: `${name.toUpperCase()}\nData & Business Analyst — London, UK\n\nSUMMARY\nAnalyst with 6 years' experience turning messy data into clear decisions. Automated month-end reporting (saving 3 days per cycle) and built exec dashboards used by 12 retail clients — ready to bring the same rigour to the ${jobTitle} role at ${company}.\n\nSKILLS\nPower BI · SQL · Excel · Python · Data visualisation · Stakeholder management\n\nEXPERIENCE\nBusiness Analyst — Retail Insights Ltd (Mar 2022 – present)\n• Own weekly trading reports and dashboards for 12 retail clients\n• Cut reporting turnaround 40% by standardising SQL models\n\nData Analyst — Citymove Finance (Jun 2019 – Mar 2022)\n• Built the SQL reporting layer and automated month-end packs (3 days saved per cycle)\n• Partnered with finance stakeholders on KPI definitions\n\nAnalyst Intern — Northgate Consulting (2018)\n• Supported market-entry research for two FTSE 250 clients\n\nEDUCATION\nBSc Economics — University of Manchester (2018)`,
+    cover_letter: `Dear ${company} team,\n\nThe ${jobTitle} opening caught my eye because it sits exactly where I do my best work: between raw data and the people who need decisions from it.\n\nOver the last six years I've owned reporting end to end — building the SQL layer at Citymove Finance and automating month-end packs that used to take three days, then moving to Retail Insights where my dashboards guide weekly trading calls for twelve clients. The pattern in both roles: find the slow, manual thing, automate it, and give stakeholders numbers they actually trust.\n\nFrom the job description, that's what this role needs too — someone who can own the KPI pack, sharpen the metrics, and make the data make sense to non-analysts. That's the job I've been doing, and the one I'd love to keep doing at ${company}.\n\nI'd welcome the chance to talk it through.\n\nBest regards,\n${name}`,
+  };
+}
+
+const DEMO_SEARCH_POOL_LOOKUP: Record<string, Row> = Object.fromEntries(
+  DEMO_SEARCH_POOL.map((job) => [
+    job.external_id,
+    {
+      id: job.external_id,
+      title: job.title,
+      company: job.company,
+      location: job.location,
+      salary: job.salary,
+      description: job.description,
+      status: "open",
+      source: job.source,
+      apply_link: job.apply_link,
+      external_id: job.external_id,
+      created_at: "",
+      _row: 0,
+    } as unknown as Row,
+  ])
+);
+
 export function demoApplications(state: DemoState): Row[] {
-  return state.apps.map((a) => ({ ...a, profile_id: "", _row: 0 }) as unknown as Row);
+  return state.apps.map((a) => {
+    const job = demoFindJob(state, a.job_id);
+    return {
+      ...a,
+      source: job?.source ?? "",
+      apply_link: job?.apply_link ?? "",
+      profile_id: "",
+      _row: 0,
+    } as unknown as Row;
+  });
 }

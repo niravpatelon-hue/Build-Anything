@@ -67,6 +67,21 @@ export function Flash({
           }
     );
   }
+  if (searchParams.analyzed) {
+    messages.push({
+      tone: "good",
+      text: "Fit check complete 🔍 — review the suggested fixes below.",
+    });
+  }
+  if (searchParams.docs) {
+    messages.push({
+      tone: "good",
+      text: "Tailored resume and cover letter are ready ✍️",
+    });
+  }
+  if (searchParams.status_saved) {
+    messages.push({ tone: "good", text: "Status updated." });
+  }
   if (searchParams.demo) {
     messages.push({
       tone: "good",

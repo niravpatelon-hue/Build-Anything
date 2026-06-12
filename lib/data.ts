@@ -300,6 +300,32 @@ export async function autoApplyToSearchResults(
   return count;
 }
 
+export async function getApplicationForEmail(
+  email: string,
+  id: string
+): Promise<{ app: Row; job: Row | null } | null> {
+  const normalized = email.trim().toLowerCase();
+  const applications = await readRows("applications");
+  const app = applications.find(
+    (a) => a.id === id && a.candidate_email.trim().toLowerCase() === normalized
+  );
+  if (!app) return null;
+  const jobs = await readRows("jobs");
+  const job = jobs.find((j) => j.id === app.job_id) ?? null;
+  return { app, job };
+}
+
+export async function updateApplication(
+  app: Row,
+  changes: Record<string, string>
+): Promise<void> {
+  const { _row, ...fields } = app;
+  await updateRow("applications", _row, {
+    ...(fields as Record<string, string>),
+    ...changes,
+  });
+}
+
 export async function listApplicationsForEmail(email: string): Promise<Row[]> {
   const normalized = email.trim().toLowerCase();
   const applications = await readRows("applications");

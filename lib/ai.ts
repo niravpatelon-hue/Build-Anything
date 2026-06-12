@@ -120,3 +120,107 @@ export async function parseResume(
   }
   return response.parsed_output;
 }
+
+const FitAnalysis = z.object({
+  match_score: z
+    .number()
+    .describe("How well the candidate fits this job, 0-100"),
+  strengths: z
+    .array(z.string())
+    .describe("Up to 3 strengths for this job, one short sentence each"),
+  gaps: z
+    .array(z.string())
+    .describe("Up to 3 gaps or risks, one short sentence each"),
+  fixes: z
+    .array(z.string())
+    .describe(
+      "3 to 5 concrete resume edits to make for this job, one short imperative sentence each, e.g. 'Lead with the dashboard project in your summary'"
+    ),
+});
+
+export type Analysis = z.infer<typeof FitAnalysis>;
+
+function profileBlock(profile: Record<string, string>): string {
+  return [
+    `Name: ${profile.name}`,
+    `Headline: ${profile.headline}`,
+    `Location: ${profile.location}`,
+    `Summary: ${profile.summary}`,
+    `Skills: ${profile.skills}`,
+    `Experience: ${profile.experience}`,
+    `Education: ${profile.education}`,
+  ].join("\n");
+}
+
+function jobBlock(job: Record<string, string>): string {
+  return [
+    `Title: ${job.title}`,
+    `Company: ${job.company}`,
+    `Location: ${job.location}`,
+    `Description: ${job.description}`,
+  ].join("\n");
+}
+
+/** Compares the candidate's profile with a job and suggests resume fixes. */
+export async function analyzeFit(
+  profile: Record<string, string>,
+  job: Record<string, string>
+): Promise<Analysis> {
+  const client = getAnthropic();
+  const response = await client.messages.parse({
+    model: "claude-opus-4-8",
+    max_tokens: 16000,
+    thinking: { type: "adaptive" },
+    output_config: { format: zodOutputFormat(FitAnalysis) },
+    messages: [
+      {
+        role: "user",
+        content: `You are helping a job seeker decide how to tailor their resume for a specific job.\n\nCANDIDATE PROFILE (extracted from their resume):\n${profileBlock(profile)}\n\nJOB:\n${jobBlock(job)}\n\nAssess the fit and suggest the most impactful resume edits for THIS job. Keep every item to one short sentence. Be honest about gaps — never invent experience the candidate doesn't have.`,
+      },
+    ],
+  });
+  if (response.stop_reason === "refusal" || !response.parsed_output) {
+    throw new Error("The fit check didn't complete — try again.");
+  }
+  return response.parsed_output;
+}
+
+const TailoredDocs = z.object({
+  tailored_resume: z
+    .string()
+    .describe(
+      "The full tailored resume as plain text with UPPERCASE section headings (SUMMARY, SKILLS, EXPERIENCE, EDUCATION). ATS-friendly, no tables."
+    ),
+  cover_letter: z
+    .string()
+    .describe(
+      "A complete, ready-to-send cover letter for this job, 250-350 words, plain text"
+    ),
+});
+
+export type Tailored = z.infer<typeof TailoredDocs>;
+
+/** Writes the job-specific resume (with the fixes applied) and cover letter. */
+export async function tailorDocuments(
+  profile: Record<string, string>,
+  job: Record<string, string>,
+  fixes: string[]
+): Promise<Tailored> {
+  const client = getAnthropic();
+  const response = await client.messages.parse({
+    model: "claude-opus-4-8",
+    max_tokens: 16000,
+    thinking: { type: "adaptive" },
+    output_config: { format: zodOutputFormat(TailoredDocs) },
+    messages: [
+      {
+        role: "user",
+        content: `Write a tailored resume and cover letter for this application.\n\nCANDIDATE PROFILE:\n${profileBlock(profile)}\n\nJOB:\n${jobBlock(job)}\n\nAGREED RESUME FIXES TO APPLY:\n${fixes.map((f) => `- ${f}`).join("\n")}\n\nRules: use only facts from the candidate profile — never invent employers, dates, degrees or numbers. Reframe and reorder to emphasise what this job values. The cover letter should sound like a real person, reference the company by name, and avoid clichés like "I am writing to express".`,
+      },
+    ],
+  });
+  if (response.stop_reason === "refusal" || !response.parsed_output) {
+    throw new Error("Document generation didn't complete — try again.");
+  }
+  return response.parsed_output;
+}
