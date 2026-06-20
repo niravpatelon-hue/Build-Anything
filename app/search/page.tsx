@@ -1,4 +1,4 @@
-import { applyExternalAction, autoApplySearchAction } from "@/lib/actions";
+import { prepareAllSearchAction, prepareExternalAction } from "@/lib/actions";
 import { getProfileByEmail, matches } from "@/lib/data";
 import { NotConfiguredError } from "@/lib/google";
 import {
@@ -119,14 +119,14 @@ export default async function SearchPage({
               {loc ? ` near “${loc}”` : ""}
             </h2>
             {user && profile && matchedIds.size > 0 && (
-              <form action={autoApplySearchAction}>
+              <form action={prepareAllSearchAction}>
                 <input type="hidden" name="q" value={q} />
                 <input type="hidden" name="loc" value={loc} />
                 <button
                   type="submit"
                   className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
                 >
-                  ⚡ Auto-apply to all {matchedIds.size} matching
+                  ⚡ Prepare all {matchedIds.size} matching
                 </button>
               </form>
             )}
@@ -173,7 +173,7 @@ export default async function SearchPage({
                 )}
                 <div className="mt-4 flex flex-wrap items-center gap-3">
                   {user ? (
-                    <form action={applyExternalAction}>
+                    <form action={prepareExternalAction}>
                       <input type="hidden" name="q" value={q} />
                       <input type="hidden" name="loc" value={loc} />
                       <input
@@ -185,7 +185,7 @@ export default async function SearchPage({
                         type="submit"
                         className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
                       >
-                        Apply &amp; track
+                        Prepare &amp; apply ▸
                       </button>
                     </form>
                   ) : (

@@ -32,7 +32,7 @@ export function Flash({
       tone: "good",
       text:
         auto > 0
-          ? `Job posted — and ${auto} matching candidate${auto === 1 ? " was" : "s were"} auto-applied instantly. ⚡`
+          ? `Job posted — and queued as a draft for ${auto} matching candidate${auto === 1 ? "" : "s"} to prepare. ⚡`
           : "Job posted.",
     });
   }
@@ -44,7 +44,7 @@ export function Flash({
     const isDemo = searchParams.parsed === "demo";
     const autoText =
       auto > 0
-        ? ` — auto-applied to ${auto} matching job${auto === 1 ? "" : "s"} ⚡`
+        ? ` — queued ${auto} matching job${auto === 1 ? "" : "s"} as drafts to prepare ⚡`
         : "";
     messages.push({
       tone: "good",
@@ -53,17 +53,31 @@ export function Flash({
         : `Resume read and profile filled in${autoText}. Check the details below and save any tweaks.`,
     });
   }
-  if (searchParams.auto_done !== undefined) {
-    const n = Number(searchParams.auto_done);
+  if (searchParams.prepared !== undefined) {
+    const n = Number(searchParams.prepared);
     messages.push(
       n > 0
         ? {
             tone: "good",
-            text: `⚡ Auto-applied to ${n} matching job${n === 1 ? "" : "s"} — all tracked in My Applications.`,
+            text: `⚡ Queued ${n} matching job${n === 1 ? "" : "s"} as drafts — curate and apply each from below.`,
           }
         : {
             tone: "good",
-            text: "No new matches to apply to — you've already covered everything that fits.",
+            text: "No new matches to prepare — everything that fits is already in your applications.",
+          }
+    );
+  }
+  if (searchParams.submitted_all !== undefined) {
+    const n = Number(searchParams.submitted_all);
+    messages.push(
+      n > 0
+        ? {
+            tone: "good",
+            text: `✅ Applied to ${n} ready application${n === 1 ? "" : "s"} — open each posting to attach your curated documents.`,
+          }
+        : {
+            tone: "good",
+            text: "Nothing was ready to apply yet — prepare an application's documents first.",
           }
     );
   }
@@ -76,7 +90,7 @@ export function Flash({
   if (searchParams.docs) {
     messages.push({
       tone: "good",
-      text: "Tailored resume and cover letter are ready ✍️",
+      text: "Tailored resume and cover letter are ready ✍️ — apply when you're set.",
     });
   }
   if (searchParams.status_saved) {
@@ -94,7 +108,7 @@ export function Flash({
       tone: "good",
       text:
         auto > 0
-          ? `Profile saved — auto-applied to ${auto} matching job${auto === 1 ? "" : "s"}. ⚡`
+          ? `Profile saved — queued ${auto} matching job${auto === 1 ? "" : "s"} as drafts to prepare. ⚡`
           : "Profile saved.",
     });
   }

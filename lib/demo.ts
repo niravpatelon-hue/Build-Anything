@@ -119,6 +119,7 @@ export const DEMO_PARSED: ParsedResume = {
       title: "Business Analyst",
       company: "Retail Insights Ltd",
       period: "Mar 2022 – present",
+      location: "London, UK",
       description:
         "Own weekly trading reports and stakeholder dashboards for 12 retail clients.",
     },
@@ -126,6 +127,7 @@ export const DEMO_PARSED: ParsedResume = {
       title: "Data Analyst",
       company: "Citymove Finance",
       period: "Jun 2019 – Mar 2022",
+      location: "London, UK",
       description:
         "Built the SQL reporting layer and automated month-end packs, saving 3 days per cycle.",
     },
@@ -133,6 +135,7 @@ export const DEMO_PARSED: ParsedResume = {
       title: "Analyst Intern",
       company: "Northgate Consulting",
       period: "2018",
+      location: "Manchester, UK",
       description: "Supported market-entry research for two FTSE 250 clients.",
     },
   ],
@@ -213,31 +216,36 @@ export function demoGetProfile(state: DemoState): Row | null {
 function fileDemoApplication(
   state: DemoState,
   job: { [key: string]: string | number | undefined },
-  auto: boolean
-): void {
+  opts: { auto: boolean; status: "draft" | "submitted" }
+): string {
   // Everything lives in a 4KB cookie: keep entries minimal — source and
   // apply_link are re-joined from the job lookup when displayed.
+  const id = Math.random().toString(36).slice(2, 10);
   state.apps.unshift({
-    id: Math.random().toString(36).slice(2, 10),
+    id,
     job_id: String(job.id ?? ""),
     job_title: String(job.title ?? ""),
     company: String(job.company ?? ""),
-    status: "submitted",
-    auto: auto ? "yes" : "no",
-    applied_at: new Date().toISOString().slice(0, 10),
+    status: opts.status,
+    auto: opts.auto ? "yes" : "no",
+    applied_at:
+      opts.status === "submitted" ? new Date().toISOString().slice(0, 10) : "",
   });
   state.apps = state.apps.slice(0, 30);
+  return id;
 }
 
-function demoAutoApply(state: DemoState): number {
+/** Queues a draft for every open matching job not already in the pipeline. */
+function demoAutoPrepare(state: DemoState): number {
   const profile = demoGetProfile(state);
   if (!profile || profile.auto_apply !== "yes") return 0;
-  const applied = new Set(state.apps.map((a) => a.job_id));
+  const inPipeline = new Set(state.apps.map((a) => a.job_id));
   let count = 0;
   for (const job of demoAllJobs(state)) {
-    if (applied.has(job.id)) continue;
+    if (inPipeline.has(job.id)) continue;
     if (!matches(profile, job)) continue;
-    fileDemoApplication(state, job, true);
+    fileDemoApplication(state, job, { auto: true, status: "draft" });
+    inPipeline.add(job.id);
     count++;
   }
   return count;
@@ -266,13 +274,13 @@ export function demoSaveProfile(
     auto_apply: input.auto_apply ?? existing.auto_apply ?? "yes",
     created_at: existing.created_at ?? new Date().toISOString().slice(0, 10),
   };
-  return demoAutoApply(state);
+  return demoAutoPrepare(state);
 }
 
-export function demoApply(
+export function demoPrepare(
   state: DemoState,
   jobId: string
-): { ok: boolean; message: string } {
+): { ok: boolean; id?: string; message: string } {
   const profile = demoGetProfile(state);
   if (!profile || !profile.name) {
     return {
@@ -282,11 +290,16 @@ export function demoApply(
   }
   const job = demoAllJobs(state).find((j) => j.id === jobId);
   if (!job) return { ok: false, message: "That job is no longer open." };
-  if (state.apps.some((a) => a.job_id === jobId)) {
-    return { ok: false, message: "You already applied to that job." };
+  const existing = state.apps.find((a) => a.job_id === jobId);
+  if (existing) {
+    return { ok: true, id: existing.id, message: "Picking up where you left off." };
   }
-  fileDemoApplication(state, job, false);
-  return { ok: true, message: `Applied to ${job.title} at ${job.company}.` };
+  const id = fileDemoApplication(state, job, { auto: false, status: "draft" });
+  return {
+    ok: true,
+    id,
+    message: `Preparing your application for ${job.title}.`,
+  };
 }
 
 export function demoPostJob(
@@ -311,7 +324,7 @@ export function demoPostJob(
     _row: 0,
   } as unknown as Row);
   state.jobs = state.jobs.slice(0, 5);
-  return demoAutoApply(state);
+  return demoAutoPrepare(state);
 }
 
 type ExternalJob = {
@@ -325,10 +338,10 @@ type ExternalJob = {
   apply_link: string;
 };
 
-export function demoApplyExternal(
+export function demoPrepareExternal(
   state: DemoState,
   result: ExternalJob
-): { ok: boolean; message: string } {
+): { ok: boolean; id?: string; message: string } {
   const profile = demoGetProfile(state);
   if (!profile || !profile.name) {
     return {
@@ -336,10 +349,11 @@ export function demoApplyExternal(
       message: "Set up your profile first — it's what gets submitted.",
     };
   }
-  if (state.apps.some((a) => a.job_id === result.external_id)) {
-    return { ok: false, message: "You already applied to that job." };
+  const existing = state.apps.find((a) => a.job_id === result.external_id);
+  if (existing) {
+    return { ok: true, id: existing.id, message: "Picking up where you left off." };
   }
-  fileDemoApplication(
+  const id = fileDemoApplication(
     state,
     {
       id: result.external_id,
@@ -348,24 +362,26 @@ export function demoApplyExternal(
       source: result.source,
       apply_link: result.apply_link,
     },
-    false
+    { auto: false, status: "draft" }
   );
   return {
     ok: true,
-    message: `Applied to ${result.title} at ${result.company} — it's now tracked in My Applications.`,
+    id,
+    message: `Preparing your application for ${result.title}.`,
   };
 }
 
-export function demoAutoApplySearch(
+/** Queues a draft for every matching search result (explicit bulk action). */
+export function demoPrepareAllSearch(
   state: DemoState,
   results: ExternalJob[]
 ): number {
   const profile = demoGetProfile(state);
-  if (!profile || profile.auto_apply !== "yes") return 0;
-  const applied = new Set(state.apps.map((a) => a.job_id));
+  if (!profile || !profile.name) return 0;
+  const inPipeline = new Set(state.apps.map((a) => a.job_id));
   let count = 0;
   for (const result of results) {
-    if (applied.has(result.external_id)) continue;
+    if (inPipeline.has(result.external_id)) continue;
     if (!matches(profile, result)) continue;
     fileDemoApplication(
       state,
@@ -376,8 +392,33 @@ export function demoAutoApplySearch(
         source: result.source,
         apply_link: result.apply_link,
       },
-      true
+      { auto: true, status: "draft" }
     );
+    inPipeline.add(result.external_id);
+    count++;
+  }
+  return count;
+}
+
+/** Marks one prepared demo application as applied. */
+export function demoSubmit(
+  state: DemoState,
+  id: string
+): { ok: boolean; message: string } {
+  const app = demoFindApp(state, id);
+  if (!app) return { ok: false, message: "Application not found." };
+  app.status = "submitted";
+  app.applied_at = new Date().toISOString().slice(0, 10);
+  return { ok: true, message: `Applied to ${app.job_title} at ${app.company}.` };
+}
+
+/** Submits every demo application in the "ready" state. */
+export function demoSubmitAllReady(state: DemoState): number {
+  let count = 0;
+  for (const app of state.apps) {
+    if (app.status !== "ready") continue;
+    app.status = "submitted";
+    app.applied_at = new Date().toISOString().slice(0, 10);
     count++;
   }
   return count;
@@ -417,6 +458,8 @@ export function demoSetAppDocs(state: DemoState, id: string): boolean {
   const app = demoFindApp(state, id);
   if (!app) return false;
   app.docs = "1";
+  // Curated documents ready → the application is ready to apply.
+  if (app.status === "draft") app.status = "ready";
   return true;
 }
 

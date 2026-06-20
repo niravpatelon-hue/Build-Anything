@@ -37,25 +37,31 @@ export function matches(profile: Row, job: MatchableJob): boolean {
   return true;
 }
 
-async function fileApplication(
+/**
+ * Creates an application row. A "draft" is queued for preparation (no
+ * applied_at yet); "submitted" means it's actually been applied to.
+ */
+async function createApplication(
   profile: Row,
   job: Row,
-  auto: boolean
-): Promise<void> {
+  opts: { auto: boolean; status: "draft" | "submitted" }
+): Promise<string> {
+  const id = crypto.randomUUID();
   await appendRow("applications", {
-    id: crypto.randomUUID(),
+    id,
     job_id: job.id,
     profile_id: profile.id,
     job_title: job.title,
     company: job.company,
     candidate_name: profile.name,
     candidate_email: profile.email,
-    status: "submitted",
-    auto: auto ? "yes" : "no",
+    status: opts.status,
+    auto: opts.auto ? "yes" : "no",
     source: job.source ?? "",
     apply_link: job.apply_link ?? "",
-    applied_at: new Date().toISOString(),
+    applied_at: opts.status === "submitted" ? new Date().toISOString() : "",
   });
+  return id;
 }
 
 export async function getProfileByEmail(email: string): Promise<Row | null> {
@@ -66,22 +72,26 @@ export async function getProfileByEmail(email: string): Promise<Row | null> {
   );
 }
 
-/** Auto-applies a profile to every open, matching job it hasn't applied to yet. */
-export async function autoApplyForProfile(profile: Row): Promise<number> {
+/**
+ * Auto-prepares a profile against every open, matching job not already in
+ * the pipeline: each match becomes a draft application, queued for the user
+ * to curate (fit check + tailored resume + cover letter) and then apply.
+ */
+export async function autoPrepareForProfile(profile: Row): Promise<number> {
   const [jobs, applications] = await Promise.all([
     readRows("jobs"),
     readRows("applications"),
   ]);
-  const alreadyApplied = new Set(
+  const alreadyInPipeline = new Set(
     applications.filter((a) => a.profile_id === profile.id).map((a) => a.job_id)
   );
 
   let count = 0;
   for (const job of jobs) {
     if (job.status !== "open") continue;
-    if (alreadyApplied.has(job.id)) continue;
+    if (alreadyInPipeline.has(job.id)) continue;
     if (!matches(profile, job)) continue;
-    await fileApplication(profile, job, true);
+    await createApplication(profile, job, { auto: true, status: "draft" });
     count++;
   }
   return count;
@@ -106,7 +116,7 @@ export type ProfileInput = {
 /** Upserts a profile; fields left undefined keep their existing values. */
 export async function saveProfile(
   input: ProfileInput
-): Promise<{ autoApplied: number }> {
+): Promise<{ prepared: number }> {
   const existing = await getProfileByEmail(input.email);
   const keep = (field: string, value: string | undefined) =>
     value !== undefined ? value : (existing?.[field] ?? "");
@@ -143,21 +153,21 @@ export async function saveProfile(
     await appendRow("profiles", data);
   }
 
-  let autoApplied = 0;
+  let prepared = 0;
   if (data.auto_apply === "yes") {
-    autoApplied = await autoApplyForProfile({ ...data, _row: 0 } as Row);
+    prepared = await autoPrepareForProfile({ ...data, _row: 0 } as Row);
   }
-  return { autoApplied };
+  return { prepared };
 }
 
-/** Posts a job, then auto-applies every opted-in matching profile to it. */
+/** Posts a job, then queues a draft for every opted-in matching profile. */
 export async function postJob(input: {
   title: string;
   company: string;
   location: string;
   salary: string;
   description: string;
-}): Promise<{ autoApplied: number }> {
+}): Promise<{ prepared: number }> {
   const job: Record<string, string> = {
     id: crypto.randomUUID(),
     title: input.title,
@@ -171,20 +181,27 @@ export async function postJob(input: {
   await appendRow("jobs", job);
 
   const profiles = await readRows("profiles");
-  let autoApplied = 0;
+  let prepared = 0;
   for (const profile of profiles) {
     if (profile.auto_apply !== "yes") continue;
     if (!matches(profile, { ...job, _row: 0 } as Row)) continue;
-    await fileApplication(profile, { ...job, _row: 0 } as Row, true);
-    autoApplied++;
+    await createApplication(profile, { ...job, _row: 0 } as Row, {
+      auto: true,
+      status: "draft",
+    });
+    prepared++;
   }
-  return { autoApplied };
+  return { prepared };
 }
 
-export async function applyManually(
+/**
+ * Starts (or resumes) the prepare workflow for a portal-board job. Creates a
+ * draft application and returns its id so the caller can open the workspace.
+ */
+export async function prepareJobApplication(
   jobId: string,
   email: string
-): Promise<{ ok: boolean; message: string }> {
+): Promise<{ ok: boolean; id?: string; message: string }> {
   const profile = await getProfileByEmail(email);
   if (!profile) {
     return {
@@ -200,14 +217,25 @@ export async function applyManually(
   if (!job || job.status !== "open") {
     return { ok: false, message: "That job is no longer open." };
   }
-  const duplicate = applications.some(
+  const existing = applications.find(
     (a) => a.job_id === jobId && a.profile_id === profile.id
   );
-  if (duplicate) {
-    return { ok: false, message: "You already applied to that job." };
+  if (existing) {
+    return {
+      ok: true,
+      id: existing.id,
+      message: "Picking up where you left off.",
+    };
   }
-  await fileApplication(profile, job, false);
-  return { ok: true, message: `Applied to ${job.title} at ${job.company}.` };
+  const id = await createApplication(profile, job, {
+    auto: false,
+    status: "draft",
+  });
+  return {
+    ok: true,
+    id,
+    message: `Preparing your application for ${job.title}.`,
+  };
 }
 
 export async function listOpenJobs(): Promise<Row[]> {
@@ -249,10 +277,14 @@ async function importExternalJob(result: {
   return { ...job, _row: 0 } as Row;
 }
 
-export async function applyToExternalJob(
+/**
+ * Starts (or resumes) the prepare workflow for a job found by search. Imports
+ * the listing, creates a draft, and returns its id for the workspace.
+ */
+export async function prepareExternalJob(
   email: string,
   result: Parameters<typeof importExternalJob>[0]
-): Promise<{ ok: boolean; message: string }> {
+): Promise<{ ok: boolean; id?: string; message: string }> {
   const profile = await getProfileByEmail(email);
   if (!profile) {
     return {
@@ -262,29 +294,36 @@ export async function applyToExternalJob(
   }
   const job = await importExternalJob(result);
   const applications = await readRows("applications");
-  if (
-    applications.some(
-      (a) => a.job_id === job.id && a.profile_id === profile.id
-    )
-  ) {
-    return { ok: false, message: "You already applied to that job." };
+  const existing = applications.find(
+    (a) => a.job_id === job.id && a.profile_id === profile.id
+  );
+  if (existing) {
+    return {
+      ok: true,
+      id: existing.id,
+      message: "Picking up where you left off.",
+    };
   }
-  await fileApplication(profile, job, false);
+  const id = await createApplication(profile, job, {
+    auto: false,
+    status: "draft",
+  });
   return {
     ok: true,
-    message: `Applied to ${job.title} at ${job.company} — it's now tracked in My Applications.`,
+    id,
+    message: `Preparing your application for ${job.title}.`,
   };
 }
 
-/** Files applications for every search result that matches the profile. */
-export async function autoApplyToSearchResults(
+/** Queues a draft for every search result that matches the profile. */
+export async function prepareSearchResults(
   email: string,
   results: Parameters<typeof importExternalJob>[0][]
 ): Promise<number> {
   const profile = await getProfileByEmail(email);
   if (!profile) return 0;
   const applications = await readRows("applications");
-  const appliedJobIds = new Set(
+  const inPipeline = new Set(
     applications.filter((a) => a.profile_id === profile.id).map((a) => a.job_id)
   );
 
@@ -292,12 +331,35 @@ export async function autoApplyToSearchResults(
   for (const result of results) {
     if (!matches(profile, result)) continue;
     const job = await importExternalJob(result);
-    if (appliedJobIds.has(job.id)) continue;
-    await fileApplication(profile, job, true);
-    appliedJobIds.add(job.id);
+    if (inPipeline.has(job.id)) continue;
+    await createApplication(profile, job, { auto: true, status: "draft" });
+    inPipeline.add(job.id);
     count++;
   }
   return count;
+}
+
+/** Marks one prepared application as actually applied. */
+export async function submitApplication(app: Row): Promise<void> {
+  await updateApplication(app, {
+    status: "submitted",
+    applied_at: new Date().toISOString(),
+  });
+}
+
+/** Submits every application currently in the "ready" state. */
+export async function submitAllReadyForEmail(email: string): Promise<number> {
+  const normalized = email.trim().toLowerCase();
+  const applications = await readRows("applications");
+  const ready = applications.filter(
+    (a) =>
+      a.candidate_email.trim().toLowerCase() === normalized &&
+      a.status === "ready"
+  );
+  for (const app of ready) {
+    await submitApplication(app);
+  }
+  return ready.length;
 }
 
 export async function getApplicationForEmail(

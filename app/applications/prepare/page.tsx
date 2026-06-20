@@ -2,6 +2,7 @@ import {
   analyzeApplicationAction,
   generateDocsAction,
   signInAction,
+  submitApplicationAction,
   updateStatusAction,
 } from "@/lib/actions";
 import { getApplicationForEmail } from "@/lib/data";
@@ -20,7 +21,8 @@ import type { Row } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
-const STATUSES = [
+// Statuses shown once an application has actually been submitted (tracking).
+const TRACK_STATUSES = [
   "submitted",
   "in review",
   "interview",
@@ -130,6 +132,17 @@ export default async function PreparePage({
     ? app.docs === "1"
     : Boolean(app.tailored_resume_link || app.cover_letter_link);
 
+  const stage = app.status ?? "draft";
+  const isPreSubmit = stage === "draft" || stage === "ready";
+  const stageBadge =
+    stage === "draft"
+      ? { label: "Draft — preparing", className: "bg-slate-100 text-slate-600" }
+      : stage === "ready"
+        ? { label: "Ready to apply", className: "bg-amber-100 text-amber-800" }
+        : stage === "submitted"
+          ? { label: "Applied", className: "bg-blue-100 text-blue-700" }
+          : { label: stage, className: "bg-blue-100 text-blue-700" };
+
   return (
     <div className="mx-auto max-w-3xl">
       <a
@@ -154,26 +167,11 @@ export default async function PreparePage({
               )}
             </p>
           </div>
-          <form action={updateStatusAction} className="flex items-center gap-2">
-            <input type="hidden" name="id" value={id} />
-            <select
-              name="status"
-              defaultValue={app.status}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            >
-              {STATUSES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-            <button
-              type="submit"
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold hover:border-indigo-400"
-            >
-              Update
-            </button>
-          </form>
+          <span
+            className={`rounded-full px-3 py-1 text-sm font-semibold ${stageBadge.className}`}
+          >
+            {stageBadge.label}
+          </span>
         </div>
         {job?.description && (
           <p className="mt-4 whitespace-pre-line text-sm text-slate-700">
@@ -261,8 +259,9 @@ export default async function PreparePage({
           Step 2 — Tailored resume &amp; cover letter ✍️
         </h2>
         <p className="mt-1 text-sm text-slate-600">
-          One click applies the fixes: a job-specific resume and a
-          ready-to-send cover letter{user.demo ? "." : ", saved as Google Docs in your Drive."}
+          One click applies the fixes: a job-specific resume — the real,
+          role-specific version of your experience — and a ready-to-send cover
+          letter{user.demo ? "." : ", saved as Google Docs in your Drive."}
         </p>
         {!docsReady && (
           <form action={generateDocsAction} className="mt-4">
@@ -336,25 +335,86 @@ export default async function PreparePage({
         )}
       </div>
 
-      {docsReady && app.apply_link && (
-        <div className="mt-6 rounded-xl border border-green-300 bg-green-50 p-6">
-          <h2 className="font-semibold text-green-900">
-            Step 3 — Submit it 🚀
-          </h2>
-          <p className="mt-1 text-sm text-green-800">
-            Your documents are ready. Open the posting, attach them, and update
-            the status here once it&apos;s sent.
-          </p>
-          <a
-            href={app.apply_link}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-3 inline-block rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800"
-          >
-            Open the application page ↗
-          </a>
-        </div>
-      )}
+      <div className="mt-6 rounded-xl border border-green-300 bg-green-50 p-6">
+        <h2 className="font-semibold text-green-900">Step 3 — Apply 🚀</h2>
+
+        {isPreSubmit ? (
+          <>
+            <p className="mt-1 text-sm text-green-800">
+              {docsReady
+                ? "Your tailored resume and cover letter are ready. Applying marks this submitted and starts tracking it" +
+                  (app.apply_link
+                    ? " — then open the posting to attach your documents and finish."
+                    : ".")
+                : "Finish the tailored resume and cover letter above, then apply."}
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <form action={submitApplicationAction}>
+                <input type="hidden" name="id" value={id} />
+                <button
+                  type="submit"
+                  disabled={!docsReady}
+                  className="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                >
+                  ✅ Apply now
+                </button>
+              </form>
+              {app.apply_link && (
+                <a
+                  href={app.apply_link}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm font-medium text-green-800 hover:underline"
+                >
+                  Open the posting ↗
+                </a>
+              )}
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="mt-1 text-sm text-green-800">
+              ✅ Applied{app.applied_at ? ` on ${app.applied_at.slice(0, 10)}` : ""}.
+              Keep the status up to date as you hear back.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              {app.apply_link && (
+                <a
+                  href={app.apply_link}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-lg bg-green-700 px-4 py-2 text-sm font-semibold text-white hover:bg-green-800"
+                >
+                  Open the posting ↗
+                </a>
+              )}
+              <form
+                action={updateStatusAction}
+                className="flex items-center gap-2"
+              >
+                <input type="hidden" name="id" value={id} />
+                <select
+                  name="status"
+                  defaultValue={stage}
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                >
+                  {TRACK_STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="submit"
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold hover:border-indigo-400"
+                >
+                  Update status
+                </button>
+              </form>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

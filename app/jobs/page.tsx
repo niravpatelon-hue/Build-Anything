@@ -1,4 +1,4 @@
-import { applyAction, postJobAction } from "@/lib/actions";
+import { postJobAction, prepareJobAction } from "@/lib/actions";
 import { listOpenJobs } from "@/lib/data";
 import { NotConfiguredError } from "@/lib/google";
 import { demoActive, demoAllJobs, readDemoState } from "@/lib/demo";
@@ -51,7 +51,7 @@ export default async function JobsPage({
           <textarea
             name="description"
             rows={4}
-            placeholder="Description — skills mentioned here are used for auto-apply matching"
+            placeholder="Description — skills mentioned here are used to match candidates"
             className={`${inputClass} sm:col-span-2`}
           />
           <button
@@ -93,13 +93,13 @@ export default async function JobsPage({
               </p>
             )}
             {user ? (
-              <form action={applyAction} className="mt-4">
+              <form action={prepareJobAction} className="mt-4">
                 <input type="hidden" name="job_id" value={job.id} />
                 <button
                   type="submit"
                   className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700"
                 >
-                  Apply with my profile
+                  Prepare &amp; apply ▸
                 </button>
               </form>
             ) : (

@@ -6,13 +6,15 @@ import { cookies } from "next/headers";
 import { getGoogleClients, NotConfiguredError } from "./google";
 import { getInfra } from "./db";
 import {
-  applyManually,
-  applyToExternalJob,
-  autoApplyToSearchResults,
   getApplicationForEmail,
   getProfileByEmail,
   postJob,
+  prepareExternalJob,
+  prepareJobApplication,
+  prepareSearchResults,
   saveProfile,
+  submitAllReadyForEmail,
+  submitApplication,
   updateApplication,
 } from "./data";
 import {
@@ -32,16 +34,17 @@ import {
 import {
   DEMO_PARSED,
   demoActive,
-  demoAnalysis,
-  demoApply,
-  demoApplyExternal,
-  demoAutoApplySearch,
   demoFindApp,
   demoPostJob,
+  demoPrepare,
+  demoPrepareAllSearch,
+  demoPrepareExternal,
   demoSaveProfile,
   demoSetAppAnalysis,
   demoSetAppDocs,
   demoSetAppStatus,
+  demoSubmit,
+  demoSubmitAllReady,
   readDemoState,
   writeDemoState,
 } from "./demo";
@@ -150,7 +153,7 @@ export async function uploadResumeAction(formData: FormData): Promise<void> {
 
     if (user.demo) {
       const state = await readDemoState();
-      const autoApplied = demoSaveProfile(state, {
+      const prepared = demoSaveProfile(state, {
         name: DEMO_PARSED.name,
         phone: DEMO_PARSED.phone,
         location: DEMO_PARSED.location,
@@ -161,7 +164,7 @@ export async function uploadResumeAction(formData: FormData): Promise<void> {
         preferred_locations: "london, remote",
       });
       await writeDemoState(state);
-      target = `/profile?parsed=demo&auto=${autoApplied}`;
+      target = `/profile?parsed=demo&auto=${prepared}`;
     } else {
       const buffer = Buffer.from(await resume.arrayBuffer());
       const [parsed, resumeLink] = await Promise.all([
@@ -169,7 +172,7 @@ export async function uploadResumeAction(formData: FormData): Promise<void> {
         uploadResumeToDrive(resume, user.email),
       ]);
 
-      const { autoApplied } = await saveProfile({
+      const { prepared } = await saveProfile({
         email: user.email,
         name: parsed.name || undefined,
         phone: parsed.phone,
@@ -182,7 +185,7 @@ export async function uploadResumeAction(formData: FormData): Promise<void> {
         education: JSON.stringify(parsed.education),
         resume_link: resumeLink,
       });
-      target = `/profile?parsed=1&auto=${autoApplied}`;
+      target = `/profile?parsed=1&auto=${prepared}`;
     }
   } catch (err) {
     if (isNextRedirect(err)) throw err;
@@ -211,19 +214,19 @@ export async function saveProfileAction(formData: FormData): Promise<void> {
   try {
     if (user.demo) {
       const state = await readDemoState();
-      const autoApplied = demoSaveProfile(state, {
+      const prepared = demoSaveProfile(state, {
         ...fields,
         auto_apply: autoApply ? "yes" : "no",
       });
       await writeDemoState(state);
-      target = `/profile?saved=1&auto=${autoApplied}`;
+      target = `/profile?saved=1&auto=${prepared}`;
     } else {
-      const { autoApplied } = await saveProfile({
+      const { prepared } = await saveProfile({
         email: user.email,
         ...fields,
         auto_apply: autoApply,
       });
-      target = `/profile?saved=1&auto=${autoApplied}`;
+      target = `/profile?saved=1&auto=${prepared}`;
     }
   } catch (err) {
     if (isNextRedirect(err)) throw err;
@@ -244,12 +247,12 @@ export async function postJobAction(formData: FormData): Promise<void> {
   try {
     if (demoActive) {
       const state = await readDemoState();
-      const autoApplied = demoPostJob(state, job);
+      const prepared = demoPostJob(state, job);
       await writeDemoState(state);
-      target = `/jobs?posted=1&auto=${autoApplied}`;
+      target = `/jobs?posted=1&auto=${prepared}`;
     } else {
-      const { autoApplied } = await postJob(job);
-      target = `/jobs?posted=1&auto=${autoApplied}`;
+      const { prepared } = await postJob(job);
+      target = `/jobs?posted=1&auto=${prepared}`;
     }
   } catch (err) {
     if (isNextRedirect(err)) throw err;
@@ -258,8 +261,8 @@ export async function postJobAction(formData: FormData): Promise<void> {
   redirect(target);
 }
 
-/** Apply to one job found by the internet-wide search. */
-export async function applyExternalAction(formData: FormData): Promise<void> {
+/** Start preparing one job found by the internet-wide search. */
+export async function prepareExternalAction(formData: FormData): Promise<void> {
   const q = String(formData.get("q") ?? "");
   const loc = String(formData.get("loc") ?? "");
   const back = `/search?q=${encodeURIComponent(q)}&loc=${encodeURIComponent(loc)}`;
@@ -268,7 +271,7 @@ export async function applyExternalAction(formData: FormData): Promise<void> {
   if (!user) {
     redirect(
       `${back}&error=${encodeURIComponent(
-        "Sign in first — your profile is what gets submitted."
+        "Sign in first — your profile is what we tailor for each job."
       )}`
     );
   }
@@ -278,19 +281,19 @@ export async function applyExternalAction(formData: FormData): Promise<void> {
     const job = JSON.parse(
       String(formData.get("job") ?? "{}")
     ) as SearchResult;
-    if (!job.external_id) throw new Error("That job can't be applied to.");
+    if (!job.external_id) throw new Error("That job can't be prepared.");
 
-    let result: { ok: boolean; message: string };
+    let result: { ok: boolean; id?: string; message: string };
     if (user!.demo) {
       const state = await readDemoState();
-      result = demoApplyExternal(state, job);
+      result = demoPrepareExternal(state, job);
       await writeDemoState(state);
     } else {
-      result = await applyToExternalJob(user!.email, job);
+      result = await prepareExternalJob(user!.email, job);
     }
-    target = `${back}&${result.ok ? "applied" : "error"}=${encodeURIComponent(
-      result.message
-    )}`;
+    target = result.ok && result.id
+      ? `/applications/prepare?id=${encodeURIComponent(result.id)}`
+      : `${back}&error=${encodeURIComponent(result.message)}`;
   } catch (err) {
     if (isNextRedirect(err)) throw err;
     target = `${back}&error=${encodeURIComponent(friendlyError(err))}`;
@@ -298,8 +301,8 @@ export async function applyExternalAction(formData: FormData): Promise<void> {
   redirect(target);
 }
 
-/** Re-runs the search server-side and applies to everything that matches. */
-export async function autoApplySearchAction(
+/** Re-runs the search server-side and queues a draft for every match. */
+export async function prepareAllSearchAction(
   formData: FormData
 ): Promise<void> {
   const q = String(formData.get("q") ?? "");
@@ -310,24 +313,24 @@ export async function autoApplySearchAction(
   if (!user) {
     redirect(
       `${back}&error=${encodeURIComponent(
-        "Sign in first — your profile is what gets submitted."
+        "Sign in first — your profile is what we tailor for each job."
       )}`
     );
   }
 
   let target: string;
   try {
+    let count: number;
     if (user!.demo) {
       const state = await readDemoState();
       const results = demoSearchJobs(q, loc);
-      const count = demoAutoApplySearch(state, results);
+      count = demoPrepareAllSearch(state, results);
       await writeDemoState(state);
-      target = `${back}&auto_done=${count}`;
     } else {
       const results = await searchJobs(q, loc);
-      const count = await autoApplyToSearchResults(user!.email, results);
-      target = `${back}&auto_done=${count}`;
+      count = await prepareSearchResults(user!.email, results);
     }
+    target = `/applications?prepared=${count}`;
   } catch (err) {
     if (isNextRedirect(err)) throw err;
     target = `${back}&error=${encodeURIComponent(friendlyError(err))}`;
@@ -420,6 +423,8 @@ export async function generateDocsAction(formData: FormData): Promise<void> {
       await updateApplication(found.app, {
         tailored_resume_link: resumeLink,
         cover_letter_link: letterLink,
+        // Curated documents ready → the application is ready to apply.
+        ...(found.app.status === "draft" ? { status: "ready" } : {}),
       });
     }
     target = `${back}&docs=1`;
@@ -457,34 +462,84 @@ export async function updateStatusAction(formData: FormData): Promise<void> {
   redirect(target);
 }
 
-export async function applyAction(formData: FormData): Promise<void> {
+/** Start preparing an application for a portal-board job. */
+export async function prepareJobAction(formData: FormData): Promise<void> {
   const user = await getCurrentUser();
   if (!user) {
     redirect(
       `/jobs?error=${encodeURIComponent(
-        "Sign in first — your profile is what gets submitted."
+        "Sign in first — your profile is what we tailor for each job."
       )}`
     );
   }
   const jobId = String(formData.get("job_id") ?? "");
   let target: string;
   try {
+    let result: { ok: boolean; id?: string; message: string };
     if (user!.demo) {
       const state = await readDemoState();
-      const result = demoApply(state, jobId);
+      result = demoPrepare(state, jobId);
       await writeDemoState(state);
-      target = `/jobs?${result.ok ? "applied" : "error"}=${encodeURIComponent(
-        result.message
-      )}`;
     } else {
-      const result = await applyManually(jobId, user!.email);
-      target = `/jobs?${result.ok ? "applied" : "error"}=${encodeURIComponent(
-        result.message
-      )}`;
+      result = await prepareJobApplication(jobId, user!.email);
     }
+    target = result.ok && result.id
+      ? `/applications/prepare?id=${encodeURIComponent(result.id)}`
+      : `/jobs?error=${encodeURIComponent(result.message)}`;
   } catch (err) {
     if (isNextRedirect(err)) throw err;
     target = `/jobs?error=${encodeURIComponent(friendlyError(err))}`;
+  }
+  redirect(target);
+}
+
+/** Files one prepared application (marks it submitted, opens the posting). */
+export async function submitApplicationAction(
+  formData: FormData
+): Promise<void> {
+  const user = await requireUser();
+  const id = String(formData.get("id") ?? "");
+  const back = `/applications/prepare?id=${encodeURIComponent(id)}`;
+  let target: string;
+  try {
+    let message: string;
+    if (user.demo) {
+      const state = await readDemoState();
+      const result = demoSubmit(state, id);
+      if (!result.ok) throw new Error(result.message);
+      await writeDemoState(state);
+      message = result.message;
+    } else {
+      const found = await getApplicationForEmail(user.email, id);
+      if (!found) throw new Error("Application not found.");
+      await submitApplication(found.app);
+      message = `Applied to ${found.app.job_title} at ${found.app.company}.`;
+    }
+    target = `${back}&applied=${encodeURIComponent(message)}`;
+  } catch (err) {
+    if (isNextRedirect(err)) throw err;
+    target = `${back}&error=${encodeURIComponent(friendlyError(err))}`;
+  }
+  redirect(target);
+}
+
+/** Files every application currently in the "ready" state, in one go. */
+export async function submitAllReadyAction(): Promise<void> {
+  const user = await requireUser();
+  let target: string;
+  try {
+    let count: number;
+    if (user.demo) {
+      const state = await readDemoState();
+      count = demoSubmitAllReady(state);
+      await writeDemoState(state);
+    } else {
+      count = await submitAllReadyForEmail(user.email);
+    }
+    target = `/applications?submitted_all=${count}`;
+  } catch (err) {
+    if (isNextRedirect(err)) throw err;
+    target = `/applications?error=${encodeURIComponent(friendlyError(err))}`;
   }
   redirect(target);
 }
