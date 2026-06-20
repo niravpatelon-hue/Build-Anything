@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "Auto-Apply Assistant",
+  "version": "1.0.0",
+  "description": "Fills job-application forms with your Auto-Apply Portal profile and the resume & cover letter you tailored for each job. You review and submit.",
+  "permissions": ["storage", "scripting", "activeTab"],
+  "host_permissions": ["http://*/*", "https://*/*"],
+  "action": {
+    "default_title": "Auto-Apply Assistant",
+    "default_popup": "popup.html"
+  },
+  "options_page": "options.html"
+}

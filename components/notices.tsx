@@ -96,6 +96,12 @@ export function Flash({
   if (searchParams.status_saved) {
     messages.push({ tone: "good", text: "Status updated." });
   }
+  if (searchParams.ext) {
+    messages.push({
+      tone: "good",
+      text: "Extension token ready 🧩 — copy it into the extension's options.",
+    });
+  }
   if (searchParams.demo) {
     messages.push({
       tone: "good",
