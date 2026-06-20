@@ -56,6 +56,14 @@ export default async function ProfilePage({
     <div className="mx-auto max-w-2xl">
       <Flash searchParams={sp} />
       <h1 className="text-2xl font-bold">My profile</h1>
+      {email && !notConfigured && (
+        <p className="mt-2 text-sm text-slate-600">
+          Your basic details — contact, education, and the skeleton of your work
+          history (employer, role, dates, location). The detailed,
+          role-specific experience is written fresh as a tailored resume each
+          time you prepare an application.
+        </p>
+      )}
 
       {!email && (
         <div className="mt-8 rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm">
@@ -227,8 +235,9 @@ export default async function ProfilePage({
                 className="h-4 w-4"
               />
               <span>
-                <span className="font-semibold">⚡ Auto-apply is on</span> —
-                apply me automatically to every new job that matches.
+                <span className="font-semibold">⚡ Auto-prepare is on</span> —
+                queue every matching job as a draft so I can curate and apply
+                from My Applications. Nothing is submitted without your say-so.
               </span>
             </label>
             <button
@@ -243,7 +252,11 @@ export default async function ProfilePage({
             <div className="mt-6 grid gap-4 sm:grid-cols-2">
               {experience.length > 0 && (
                 <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                  <h3 className="font-semibold">Experience</h3>
+                  <h3 className="font-semibold">Employment history</h3>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Employer, role, dates and location. The achievements get
+                    tailored to each job when you prepare an application.
+                  </p>
                   <ul className="mt-3 space-y-3 text-sm">
                     {experience.map((e, i) => (
                       <li key={i}>
@@ -251,10 +264,10 @@ export default async function ProfilePage({
                           {e.title}
                           {e.company ? ` · ${e.company}` : ""}
                         </p>
-                        <p className="text-xs text-slate-500">{e.period}</p>
-                        {e.description && (
-                          <p className="mt-1 text-slate-600">{e.description}</p>
-                        )}
+                        <p className="text-xs text-slate-500">
+                          {e.period}
+                          {e.location ? ` · ${e.location}` : ""}
+                        </p>
                       </li>
                     ))}
                   </ul>

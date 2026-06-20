@@ -1,4 +1,4 @@
-import { signInAction } from "@/lib/actions";
+import { signInAction, submitAllReadyAction } from "@/lib/actions";
 import { listApplicationsForEmail } from "@/lib/data";
 import { NotConfiguredError } from "@/lib/google";
 import { demoActive, demoApplications, readDemoState } from "@/lib/demo";
@@ -7,6 +7,28 @@ import { Flash, SetupNotice } from "@/components/notices";
 import type { Row } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
+
+const STAGE_STYLES: Record<string, string> = {
+  draft: "bg-slate-100 text-slate-600",
+  ready: "bg-amber-100 text-amber-800",
+  submitted: "bg-blue-100 text-blue-700",
+  "in review": "bg-blue-100 text-blue-700",
+  interview: "bg-purple-100 text-purple-700",
+  offer: "bg-green-100 text-green-700",
+  rejected: "bg-red-100 text-red-700",
+  closed: "bg-slate-100 text-slate-500",
+};
+
+const STAGE_LABELS: Record<string, string> = {
+  draft: "draft",
+  ready: "ready to apply",
+};
+
+function cta(status: string): string {
+  if (status === "draft") return "Prepare ▸";
+  if (status === "ready") return "Review & apply ▸";
+  return "Track ▸";
+}
 
 export default async function ApplicationsPage({
   searchParams,
@@ -32,13 +54,16 @@ export default async function ApplicationsPage({
     }
   }
 
+  const readyCount =
+    applications?.filter((a) => a.status === "ready").length ?? 0;
+
   return (
     <div className="mx-auto max-w-3xl">
       <Flash searchParams={sp} />
       <h1 className="text-2xl font-bold">My applications</h1>
       <p className="mt-2 text-sm text-slate-600">
-        Every application in one place — including the ones auto-apply filed
-        for you.
+        Prepare each one — fit check, then a tailored resume and cover letter —
+        and apply when it&apos;s ready. Everything is tracked here in one place.
       </p>
 
       {!email && (
@@ -54,12 +79,34 @@ export default async function ApplicationsPage({
         </form>
       )}
 
+      {readyCount > 0 && (
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
+          <p className="text-sm text-amber-900">
+            <span className="font-semibold">
+              {readyCount} application{readyCount === 1 ? "" : "s"} ready to
+              apply
+            </span>{" "}
+            — curated and waiting.
+          </p>
+          <form action={submitAllReadyAction}>
+            <button
+              type="submit"
+              className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700"
+            >
+              ⚡ Apply to all {readyCount} ready
+            </button>
+          </form>
+        </div>
+      )}
+
       <div className="mt-6">
         {notConfigured && <SetupNotice />}
         {applications && applications.length === 0 && (
           <p className="rounded-xl border border-slate-200 bg-white p-8 text-center text-slate-500">
-            No applications yet. Turn on auto-apply in your profile and
-            they&apos;ll start appearing here.
+            No applications yet. Find a job and hit{" "}
+            <span className="font-medium">Prepare</span> — or turn on
+            auto-prepare in your profile and matching jobs will queue here as
+            drafts.
           </p>
         )}
         {applications && applications.length > 0 && (
@@ -69,9 +116,9 @@ export default async function ApplicationsPage({
                 <tr>
                   <th className="px-4 py-3">Job</th>
                   <th className="px-4 py-3">Company</th>
-                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Stage</th>
                   <th className="px-4 py-3">How</th>
-                  <th className="px-4 py-3">Date</th>
+                  <th className="px-4 py-3">Applied</th>
                   <th className="px-4 py-3"></th>
                 </tr>
               </thead>
@@ -99,22 +146,26 @@ export default async function ApplicationsPage({
                     </td>
                     <td className="px-4 py-3 text-slate-600">{a.company}</td>
                     <td className="px-4 py-3">
-                      <span className="rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700">
-                        {a.status}
+                      <span
+                        className={`rounded-full px-2 py-1 text-xs font-medium ${
+                          STAGE_STYLES[a.status] ?? "bg-blue-100 text-blue-700"
+                        }`}
+                      >
+                        {STAGE_LABELS[a.status] ?? a.status}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       {a.auto === "yes" ? "⚡ auto" : "manual"}
                     </td>
                     <td className="px-4 py-3 text-slate-500">
-                      {a.applied_at ? a.applied_at.slice(0, 10) : ""}
+                      {a.applied_at ? a.applied_at.slice(0, 10) : "—"}
                     </td>
                     <td className="px-4 py-3">
                       <a
                         href={`/applications/prepare?id=${a.id}`}
                         className="font-semibold text-indigo-600 hover:underline"
                       >
-                        Prepare ▸
+                        {cta(a.status)}
                       </a>
                     </td>
                   </tr>

@@ -2,11 +2,12 @@ export default function Home() {
   return (
     <div className="flex flex-col items-center text-center">
       <h1 className="max-w-2xl text-4xl font-extrabold tracking-tight sm:text-5xl">
-        Stop applying to jobs one by one.
+        A resume tailored to every job — before you apply.
       </h1>
       <p className="mt-6 max-w-xl text-lg text-slate-600">
-        Set up your profile once. When a job that matches your skills and
-        preferences shows up, the portal applies for you — automatically.
+        Set up your profile once. For each job, the portal checks your fit and
+        writes a tailored resume and cover letter — then you apply when it&apos;s
+        ready, one click or in bulk.
       </p>
       <div className="mt-8 flex gap-3">
         <a
@@ -25,8 +26,8 @@ export default function Home() {
       <div className="mt-12 grid w-full gap-4 sm:grid-cols-3">
         {[
           ["🔎", "Search the web", "Jobs from LinkedIn, Indeed, Glassdoor and more.", "/search"],
-          ["👤", "One profile", "Your details and resume, saved once.", "/profile"],
-          ["⚡", "Auto-apply", "Matching jobs get your application instantly.", "/applications"],
+          ["✍️", "Tailored per job", "A fit check, resume and cover letter for each role.", "/applications"],
+          ["⚡", "Apply in bulk", "Fire off everything you've prepared in one click.", "/applications"],
         ].map(([icon, title, text, href]) => (
           <a
             key={title}

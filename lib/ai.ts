@@ -43,10 +43,15 @@ const ResumeProfile = z.object({
         title: z.string(),
         company: z.string(),
         period: z.string().describe("e.g. 'Jan 2021 – Mar 2024'"),
+        location: z
+          .string()
+          .describe("City/country or 'Remote' for this role, or empty string"),
         description: z.string().describe("One-line summary of the role"),
       })
     )
-    .describe("Work history, most recent first"),
+    .describe(
+      "Employment history skeleton, most recent first — employer, title, dates and location. The detailed achievements are written fresh per job application."
+    ),
   education: z.array(
     z.object({
       degree: z.string(),
@@ -140,14 +145,21 @@ const FitAnalysis = z.object({
 
 export type Analysis = z.infer<typeof FitAnalysis>;
 
+/**
+ * The profile is the candidate's factual *skeleton* — contact details,
+ * education, and the employment history as employer/title/dates/location.
+ * It is the source of truth for facts, never for the detailed wording of
+ * what the candidate did (that is written fresh per job in the resume).
+ */
 function profileBlock(profile: Record<string, string>): string {
   return [
     `Name: ${profile.name}`,
     `Headline: ${profile.headline}`,
+    `Contact: ${profile.email}${profile.phone ? ` · ${profile.phone}` : ""}`,
     `Location: ${profile.location}`,
     `Summary: ${profile.summary}`,
     `Skills: ${profile.skills}`,
-    `Experience: ${profile.experience}`,
+    `Employment history (skeleton — employer, title, dates, location): ${profile.experience}`,
     `Education: ${profile.education}`,
   ].join("\n");
 }
@@ -215,7 +227,7 @@ export async function tailorDocuments(
     messages: [
       {
         role: "user",
-        content: `Write a tailored resume and cover letter for this application.\n\nCANDIDATE PROFILE:\n${profileBlock(profile)}\n\nJOB:\n${jobBlock(job)}\n\nAGREED RESUME FIXES TO APPLY:\n${fixes.map((f) => `- ${f}`).join("\n")}\n\nRules: use only facts from the candidate profile — never invent employers, dates, degrees or numbers. Reframe and reorder to emphasise what this job values. The cover letter should sound like a real person, reference the company by name, and avoid clichés like "I am writing to express".`,
+        content: `Write a tailored resume and cover letter for this specific job. The resume you produce is the authoritative record of the candidate's experience for THIS application — the profile only supplies the factual skeleton.\n\nCANDIDATE PROFILE (factual skeleton — treat as fixed facts):\n${profileBlock(profile)}\n\nJOB:\n${jobBlock(job)}\n\nAGREED RESUME FIXES TO APPLY:\n${fixes.map((f) => `- ${f}`).join("\n")}\n\nHow to build the resume:\n- Keep the factual skeleton exactly as given: the same employers, job titles, dates, locations and education. Never add, remove, merge or invent a job, date, degree or number.\n- For each role, write 2–4 specific, results-focused bullet points framed for this job, drawn from the candidate's background and skills. This is where the real, job-specific experience detail lives.\n- Reorder and emphasise what this job values most; apply the agreed fixes.\n- The cover letter should sound like a real person, reference the company by name, and avoid clichés like "I am writing to express".`,
       },
     ],
   });

@@ -12,19 +12,34 @@ applied to jobs that match their preferences.
 
 ## How it works
 
+The model is **prepare first, apply when ready**. A job becomes a *draft*, you
+curate it (fit check → tailored resume + cover letter), it turns *ready*, and
+only then is it applied — one at a time or all the ready ones in bulk.
+
 - **My Profile** — sign in with Google, upload a resume (stored in Drive) and
-  the AI reads it into a full profile. Auto-apply on by default.
+  the AI reads it into your profile. The profile is the factual *skeleton*
+  (contact, education, and your employment history: employer, role, dates,
+  location). The detailed, role-specific experience is written fresh per job.
+  Auto-prepare is on by default: matching jobs queue as drafts to review.
 - **Find Jobs** — searches listings from across the web (LinkedIn, Indeed,
-  Glassdoor, company pages via the JSearch aggregator); one-click
-  apply-and-track, plus bulk auto-apply to everything that matches.
-- **Job Board** — jobs posted inside the portal; new posts auto-apply every
-  matching opted-in profile.
-- **My Applications** — every application tracked with status. Each one has a
-  Prepare workspace: AI fit check (score, strengths, gaps, suggested fixes),
-  then one click writes a tailored resume + cover letter saved as Google Docs
-  in Drive.
+  Glassdoor, company pages via the JSearch aggregator); "Prepare & apply"
+  starts one job, or "Prepare all matching" queues every match as a draft.
+- **Job Board** — jobs posted inside the portal; new posts queue a draft for
+  every matching opted-in profile.
+- **My Applications** — every application tracked by stage (draft → ready to
+  apply → applied → …). Each has a Prepare workspace: AI fit check (score,
+  strengths, gaps, fixes), then one click writes a tailored resume + cover
+  letter (saved as Google Docs in Drive) and marks it ready. Apply a single
+  one, or hit "Apply to all ready" to file every prepared application at once.
 - **Demo mode** — until credentials are configured the whole portal runs on
   sample data (cookie-based, max 4KB) so it can be explored with zero setup.
+
+> **On fully hands-off applying:** the portal does not create accounts on job
+> sites or submit applications on your behalf with stored passwords. Those
+> sites (LinkedIn, Indeed, Workday, …) forbid automated submission and block
+> it with CAPTCHAs and bot detection, and storing third-party passwords is a
+> security liability. Applying opens the real posting with your curated
+> documents ready to attach, so the final submit stays a human action.
 
 All data lives in the `auto-apply-job-portal-db` Google Sheet
 (tabs: `profiles`, `jobs`, `applications`). The app creates the Sheet, the
