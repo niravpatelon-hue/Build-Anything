@@ -13,6 +13,7 @@ import {
   prepareJobApplication,
   prepareSearchResults,
   saveProfile,
+  setApiToken,
   submitAllReadyForEmail,
   submitApplication,
   updateApplication,
@@ -423,6 +424,9 @@ export async function generateDocsAction(formData: FormData): Promise<void> {
       await updateApplication(found.app, {
         tailored_resume_link: resumeLink,
         cover_letter_link: letterLink,
+        // Kept as text too so the browser extension can autofill them.
+        tailored_resume_text: docs.tailored_resume,
+        cover_letter_text: docs.cover_letter,
         // Curated documents ready → the application is ready to apply.
         ...(found.app.status === "draft" ? { status: "ready" } : {}),
       });
@@ -519,6 +523,25 @@ export async function submitApplicationAction(
   } catch (err) {
     if (isNextRedirect(err)) throw err;
     target = `${back}&error=${encodeURIComponent(friendlyError(err))}`;
+  }
+  redirect(target);
+}
+
+/** Generates (or rotates) the API token the browser extension uses. */
+export async function connectExtensionAction(): Promise<void> {
+  const user = await requireUser();
+  let target = "/profile?ext=1";
+  try {
+    if (!user.demo) {
+      const token = (crypto.randomUUID() + crypto.randomUUID()).replace(
+        /-/g,
+        ""
+      );
+      await setApiToken(user.email, token);
+    }
+  } catch (err) {
+    if (isNextRedirect(err)) throw err;
+    target = `/profile?error=${encodeURIComponent(friendlyError(err))}`;
   }
   redirect(target);
 }

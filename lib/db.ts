@@ -20,6 +20,7 @@ export const TABS = {
     "resume_link",
     "auto_apply",
     "created_at",
+    "api_token",
   ],
   jobs: [
     "id",
@@ -50,6 +51,8 @@ export const TABS = {
     "tailored_resume_link",
     "cover_letter_link",
     "applied_at",
+    "tailored_resume_text",
+    "cover_letter_text",
   ],
 } as const;
 
@@ -161,13 +164,27 @@ async function setupInfra(): Promise<Infra> {
       spreadsheetId,
       range: `${tab}!A1:Z1`,
     });
-    if (!head.data.values?.length) {
+    const existing = (head.data.values?.[0] ?? []) as string[];
+    if (existing.length === 0) {
       await sheets.spreadsheets.values.update({
         spreadsheetId,
         range: `${tab}!A1`,
         valueInputOption: "RAW",
         requestBody: { values: [[...headers]] },
       });
+    } else {
+      // Schema can gain columns over time (always appended at the end of
+      // TABS). Add any header the sheet doesn't have yet so reads/writes
+      // stay aligned without disturbing existing columns or data.
+      const missing = headers.filter((h) => !existing.includes(h));
+      if (missing.length > 0) {
+        await sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: `${tab}!A1`,
+          valueInputOption: "RAW",
+          requestBody: { values: [[...existing, ...missing]] },
+        });
+      }
     }
   }
 

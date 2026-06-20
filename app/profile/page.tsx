@@ -1,4 +1,5 @@
 import {
+  connectExtensionAction,
   saveProfileAction,
   signInAction,
   uploadResumeAction,
@@ -51,6 +52,7 @@ export default async function ProfilePage({
 
   const experience = profile ? safeParse(profile.experience ?? "") : [];
   const education = profile ? safeParse(profile.education ?? "") : [];
+  const extToken = user?.demo ? "demo" : (profile?.api_token ?? "");
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -247,6 +249,60 @@ export default async function ProfilePage({
               Save profile
             </button>
           </form>
+
+          <div className="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+            <h2 className="font-semibold">🧩 Connect your browser extension</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              The Auto-Apply Assistant extension fills job-application forms in
+              your own browser using this profile and the resume &amp; cover
+              letter you tailored for each job — you review and submit. Install
+              it from the{" "}
+              <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">
+                extension/
+              </code>{" "}
+              folder (see its README), then paste your portal address and the
+              token below into the extension&apos;s options.
+            </p>
+
+            <div className="mt-4 space-y-3 text-sm">
+              <div>
+                <span className="font-medium">Your access token</span>
+                {extToken ? (
+                  <code className="mt-1 block break-all rounded-lg bg-slate-900 px-3 py-2 text-xs text-slate-100">
+                    {extToken}
+                  </code>
+                ) : (
+                  <p className="mt-1 text-slate-600">
+                    Not generated yet — create one below.
+                  </p>
+                )}
+                {user?.demo && (
+                  <p className="mt-1 text-xs text-amber-700">
+                    Demo token — returns sample data so you can try the
+                    extension. Your private token appears here once the Google
+                    database is connected.
+                  </p>
+                )}
+                {!user?.demo && extToken && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Keep this secret — anyone with it can read your profile and
+                    documents. Regenerate any time to revoke the old one.
+                  </p>
+                )}
+              </div>
+
+              {!user?.demo && (
+                <form action={connectExtensionAction}>
+                  <button
+                    type="submit"
+                    className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold hover:border-indigo-400"
+                  >
+                    {extToken ? "Regenerate token" : "Generate token"}
+                  </button>
+                </form>
+              )}
+            </div>
+          </div>
 
           {(experience.length > 0 || education.length > 0) && (
             <div className="mt-6 grid gap-4 sm:grid-cols-2">

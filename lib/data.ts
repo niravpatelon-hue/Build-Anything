@@ -64,6 +64,31 @@ async function createApplication(
   return id;
 }
 
+/** Looks a profile up by its browser-extension API token. */
+export async function getProfileByToken(token: string): Promise<Row | null> {
+  if (!token) return null;
+  const profiles = await readRows("profiles");
+  return profiles.find((p) => p.api_token && p.api_token === token) ?? null;
+}
+
+/** Stores (or rotates) the extension API token on an existing profile. */
+export async function setApiToken(
+  email: string,
+  token: string
+): Promise<void> {
+  const profile = await getProfileByEmail(email);
+  if (!profile) {
+    throw new Error(
+      "Set up your profile first — the extension needs it to autofill."
+    );
+  }
+  const { _row, ...fields } = profile;
+  await updateRow("profiles", _row, {
+    ...(fields as Record<string, string>),
+    api_token: token,
+  });
+}
+
 export async function getProfileByEmail(email: string): Promise<Row | null> {
   const normalized = email.trim().toLowerCase();
   const profiles = await readRows("profiles");
